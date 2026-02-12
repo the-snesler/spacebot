@@ -105,6 +105,12 @@ pub struct Scheduler {
     context: HeartbeatContext,
 }
 
+impl std::fmt::Debug for Scheduler {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Scheduler").finish_non_exhaustive()
+    }
+}
+
 impl Scheduler {
     pub fn new(context: HeartbeatContext) -> Self {
         Self {

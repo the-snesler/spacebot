@@ -268,7 +268,7 @@ async fn main() -> anyhow::Result<()> {
             store: store.clone(),
         };
 
-        let scheduler = spacebot::heartbeat::Scheduler::new(heartbeat_context);
+        let scheduler = Arc::new(spacebot::heartbeat::Scheduler::new(heartbeat_context));
 
         match store.load_all().await {
             Ok(configs) => {
@@ -281,6 +281,12 @@ async fn main() -> anyhow::Result<()> {
             Err(error) => {
                 tracing::warn!(agent_id = %agent_id, %error, "failed to load heartbeats from database");
             }
+        }
+
+        // Register the heartbeat management tool on the agent's shared tool server
+        let heartbeat_tool = spacebot::tools::HeartbeatTool::new(store, scheduler.clone());
+        if let Err(error) = agent.deps.tool_server.add_tool(heartbeat_tool).await {
+            tracing::warn!(agent_id = %agent_id, %error, "failed to register heartbeat tool");
         }
 
         heartbeat_schedulers.push(scheduler);

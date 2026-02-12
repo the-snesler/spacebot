@@ -6,6 +6,7 @@ use anyhow::Context as _;
 use sqlx::SqlitePool;
 
 /// Heartbeat store for persistence.
+#[derive(Debug)]
 pub struct HeartbeatStore {
     pool: SqlitePool,
 }

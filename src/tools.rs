@@ -34,6 +34,7 @@ pub mod shell;
 pub mod file;
 pub mod exec;
 pub mod browser;
+pub mod heartbeat;
 
 pub use reply::{ReplyTool, ReplyArgs, ReplyOutput, ReplyError};
 pub use branch_tool::{BranchTool, BranchArgs, BranchOutput, BranchError};
@@ -47,6 +48,7 @@ pub use shell::{ShellTool, ShellArgs, ShellOutput, ShellError, ShellResult};
 pub use file::{FileTool, FileArgs, FileOutput, FileError, FileEntryOutput, FileEntry, FileType};
 pub use exec::{ExecTool, ExecArgs, ExecOutput, ExecError, ExecResult, EnvVar};
 pub use browser::{BrowserTool, BrowserArgs, BrowserOutput, BrowserError, BrowserAction, ActKind, ElementSummary, TabInfo};
+pub use heartbeat::{HeartbeatTool, HeartbeatArgs, HeartbeatOutput, HeartbeatError};
 
 use crate::agent::channel::ChannelState;
 use crate::config::BrowserConfig;
