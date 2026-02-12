@@ -1,0 +1,481 @@
+//! SpacebotModel: Custom CompletionModel implementation that routes through LlmManager.
+
+use crate::llm::manager::LlmManager;
+
+use rig::completion::{
+    self, CompletionError, CompletionModel, CompletionRequest, GetTokenUsage,
+};
+use rig::message::{
+    AssistantContent, Message, Text, ToolCall, ToolFunction, ToolResult, UserContent,
+};
+use rig::one_or_many::OneOrMany;
+use rig::streaming::StreamingCompletionResponse;
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+
+/// Raw provider response. Wraps the JSON so Rig can carry it through.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RawResponse {
+    pub body: serde_json::Value,
+}
+
+/// Streaming response placeholder. Streaming will be implemented per-provider
+/// when we wire up SSE parsing.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RawStreamingResponse {
+    pub body: serde_json::Value,
+}
+
+impl GetTokenUsage for RawStreamingResponse {
+    fn token_usage(&self) -> Option<completion::Usage> {
+        None
+    }
+}
+
+/// Custom completion model that routes through LlmManager.
+#[derive(Clone)]
+pub struct SpacebotModel {
+    llm_manager: Arc<LlmManager>,
+    model_name: String,
+    provider: String,
+}
+
+impl SpacebotModel {
+    /// Get the provider name.
+    pub fn provider(&self) -> &str {
+        &self.provider
+    }
+
+    /// Get the model name.
+    pub fn model_name(&self) -> &str {
+        &self.model_name
+    }
+}
+
+impl CompletionModel for SpacebotModel {
+    type Response = RawResponse;
+    type StreamingResponse = RawStreamingResponse;
+    type Client = Arc<LlmManager>;
+
+    fn make(client: &Self::Client, model: impl Into<String>) -> Self {
+        let full_name = model.into();
+        let (provider, model_name) = if let Some((p, m)) = full_name.split_once('/') {
+            (p.to_string(), m.to_string())
+        } else {
+            ("anthropic".to_string(), full_name)
+        };
+
+        Self {
+            llm_manager: client.clone(),
+            model_name,
+            provider,
+        }
+    }
+
+    async fn completion(
+        &self,
+        request: CompletionRequest,
+    ) -> Result<completion::CompletionResponse<RawResponse>, CompletionError> {
+        match self.provider.as_str() {
+            "anthropic" => self.call_anthropic(request).await,
+            "openai" => self.call_openai(request).await,
+            other => Err(CompletionError::ProviderError(format!(
+                "unknown provider: {other}"
+            ))),
+        }
+    }
+
+    async fn stream(
+        &self,
+        _request: CompletionRequest,
+    ) -> Result<StreamingCompletionResponse<RawStreamingResponse>, CompletionError> {
+        Err(CompletionError::ProviderError(
+            "streaming not yet implemented".into(),
+        ))
+    }
+}
+
+impl SpacebotModel {
+    async fn call_anthropic(
+        &self,
+        request: CompletionRequest,
+    ) -> Result<completion::CompletionResponse<RawResponse>, CompletionError> {
+        let api_key = self
+            .llm_manager
+            .get_api_key("anthropic")
+            .map_err(|e| CompletionError::ProviderError(e.to_string()))?;
+
+        let messages = convert_messages_to_anthropic(&request.chat_history);
+
+        let mut body = serde_json::json!({
+            "model": self.model_name,
+            "messages": messages,
+            "max_tokens": request.max_tokens.unwrap_or(4096),
+        });
+
+        if let Some(preamble) = &request.preamble {
+            body["system"] = serde_json::json!(preamble);
+        }
+
+        if let Some(temperature) = request.temperature {
+            body["temperature"] = serde_json::json!(temperature);
+        }
+
+        if !request.tools.is_empty() {
+            let tools: Vec<serde_json::Value> = request
+                .tools
+                .iter()
+                .map(|t| {
+                    serde_json::json!({
+                        "name": t.name,
+                        "description": t.description,
+                        "input_schema": t.parameters,
+                    })
+                })
+                .collect();
+            body["tools"] = serde_json::json!(tools);
+        }
+
+        let response = self
+            .llm_manager
+            .http_client()
+            .post("https://api.anthropic.com/v1/messages")
+            .header("x-api-key", &api_key)
+            .header("anthropic-version", "2023-06-01")
+            .header("content-type", "application/json")
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| CompletionError::ProviderError(e.to_string()))?;
+
+        let status = response.status();
+        let response_body: serde_json::Value = response
+            .json()
+            .await
+            .map_err(|e| CompletionError::ProviderError(e.to_string()))?;
+
+        if !status.is_success() {
+            let message = response_body["error"]["message"]
+                .as_str()
+                .unwrap_or("unknown error");
+            return Err(CompletionError::ProviderError(format!(
+                "Anthropic API error ({status}): {message}"
+            )));
+        }
+
+        parse_anthropic_response(response_body)
+    }
+
+    async fn call_openai(
+        &self,
+        request: CompletionRequest,
+    ) -> Result<completion::CompletionResponse<RawResponse>, CompletionError> {
+        let api_key = self
+            .llm_manager
+            .get_api_key("openai")
+            .map_err(|e| CompletionError::ProviderError(e.to_string()))?;
+
+        let mut messages = Vec::new();
+
+        if let Some(preamble) = &request.preamble {
+            messages.push(serde_json::json!({
+                "role": "system",
+                "content": preamble,
+            }));
+        }
+
+        messages.extend(convert_messages_to_openai(&request.chat_history));
+
+        let mut body = serde_json::json!({
+            "model": self.model_name,
+            "messages": messages,
+        });
+
+        if let Some(max_tokens) = request.max_tokens {
+            body["max_tokens"] = serde_json::json!(max_tokens);
+        }
+
+        if let Some(temperature) = request.temperature {
+            body["temperature"] = serde_json::json!(temperature);
+        }
+
+        if !request.tools.is_empty() {
+            let tools: Vec<serde_json::Value> = request
+                .tools
+                .iter()
+                .map(|t| {
+                    serde_json::json!({
+                        "type": "function",
+                        "function": {
+                            "name": t.name,
+                            "description": t.description,
+                            "parameters": t.parameters,
+                        }
+                    })
+                })
+                .collect();
+            body["tools"] = serde_json::json!(tools);
+        }
+
+        let response = self
+            .llm_manager
+            .http_client()
+            .post("https://api.openai.com/v1/chat/completions")
+            .header("authorization", format!("Bearer {api_key}"))
+            .header("content-type", "application/json")
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| CompletionError::ProviderError(e.to_string()))?;
+
+        let status = response.status();
+        let response_body: serde_json::Value = response
+            .json()
+            .await
+            .map_err(|e| CompletionError::ProviderError(e.to_string()))?;
+
+        if !status.is_success() {
+            let message = response_body["error"]["message"]
+                .as_str()
+                .unwrap_or("unknown error");
+            return Err(CompletionError::ProviderError(format!(
+                "OpenAI API error ({status}): {message}"
+            )));
+        }
+
+        parse_openai_response(response_body)
+    }
+}
+
+// --- Helpers ---
+
+fn tool_result_content_to_string(content: &OneOrMany<rig::message::ToolResultContent>) -> String {
+    content
+        .iter()
+        .filter_map(|c| match c {
+            rig::message::ToolResultContent::Text(t) => Some(t.text.clone()),
+            _ => None,
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+// --- Message conversion ---
+
+fn convert_messages_to_anthropic(messages: &OneOrMany<Message>) -> Vec<serde_json::Value> {
+    messages
+        .iter()
+        .map(|message| match message {
+            Message::User { content } => {
+                let parts: Vec<serde_json::Value> = content
+                    .iter()
+                    .filter_map(|c| match c {
+                        UserContent::Text(t) => {
+                            Some(serde_json::json!({"type": "text", "text": t.text}))
+                        }
+                        UserContent::ToolResult(result) => Some(serde_json::json!({
+                            "type": "tool_result",
+                            "tool_use_id": result.id,
+                            "content": tool_result_content_to_string(&result.content),
+                        })),
+                        _ => None,
+                    })
+                    .collect();
+                serde_json::json!({"role": "user", "content": parts})
+            }
+            Message::Assistant { content, .. } => {
+                let parts: Vec<serde_json::Value> = content
+                    .iter()
+                    .filter_map(|c| match c {
+                        AssistantContent::Text(t) => {
+                            Some(serde_json::json!({"type": "text", "text": t.text}))
+                        }
+                        AssistantContent::ToolCall(tc) => Some(serde_json::json!({
+                            "type": "tool_use",
+                            "id": tc.id,
+                            "name": tc.function.name,
+                            "input": tc.function.arguments,
+                        })),
+                        _ => None,
+                    })
+                    .collect();
+                serde_json::json!({"role": "assistant", "content": parts})
+            }
+        })
+        .collect()
+}
+
+fn convert_messages_to_openai(messages: &OneOrMany<Message>) -> Vec<serde_json::Value> {
+    let mut result = Vec::new();
+
+    for message in messages.iter() {
+        match message {
+            Message::User { content } => {
+                for item in content.iter() {
+                    match item {
+                        UserContent::Text(t) => {
+                            result.push(serde_json::json!({
+                                "role": "user",
+                                "content": t.text,
+                            }));
+                        }
+                        UserContent::ToolResult(tr) => {
+                            result.push(serde_json::json!({
+                                "role": "tool",
+                                "tool_call_id": tr.id,
+                                "content": tool_result_content_to_string(&tr.content),
+                            }));
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            Message::Assistant { content, .. } => {
+                let mut text_parts = Vec::new();
+                let mut tool_calls = Vec::new();
+
+                for item in content.iter() {
+                    match item {
+                        AssistantContent::Text(t) => {
+                            text_parts.push(t.text.clone());
+                        }
+                        AssistantContent::ToolCall(tc) => {
+                            // OpenAI expects arguments as a JSON string
+                            let args_string = serde_json::to_string(&tc.function.arguments)
+                                .unwrap_or_else(|_| "{}".to_string());
+                            tool_calls.push(serde_json::json!({
+                                "id": tc.id,
+                                "type": "function",
+                                "function": {
+                                    "name": tc.function.name,
+                                    "arguments": args_string,
+                                }
+                            }));
+                        }
+                        _ => {}
+                    }
+                }
+
+                let mut msg = serde_json::json!({"role": "assistant"});
+                if !text_parts.is_empty() {
+                    msg["content"] = serde_json::json!(text_parts.join("\n"));
+                }
+                if !tool_calls.is_empty() {
+                    msg["tool_calls"] = serde_json::json!(tool_calls);
+                }
+                result.push(msg);
+            }
+        }
+    }
+
+    result
+}
+
+// --- Response parsing ---
+
+fn make_tool_call(id: String, name: String, arguments: serde_json::Value) -> ToolCall {
+    ToolCall {
+        id,
+        call_id: None,
+        function: ToolFunction { name, arguments },
+        signature: None,
+        additional_params: None,
+    }
+}
+
+fn parse_anthropic_response(
+    body: serde_json::Value,
+) -> Result<completion::CompletionResponse<RawResponse>, CompletionError> {
+    let content_blocks = body["content"]
+        .as_array()
+        .ok_or_else(|| CompletionError::ResponseError("missing content array".into()))?;
+
+    let mut assistant_content = Vec::new();
+
+    for block in content_blocks {
+        match block["type"].as_str() {
+            Some("text") => {
+                let text = block["text"].as_str().unwrap_or("").to_string();
+                assistant_content.push(AssistantContent::Text(Text { text }));
+            }
+            Some("tool_use") => {
+                let id = block["id"].as_str().unwrap_or("").to_string();
+                let name = block["name"].as_str().unwrap_or("").to_string();
+                let arguments = block["input"].clone();
+                assistant_content
+                    .push(AssistantContent::ToolCall(make_tool_call(id, name, arguments)));
+            }
+            _ => {}
+        }
+    }
+
+    let choice = OneOrMany::many(assistant_content)
+        .map_err(|_| CompletionError::ResponseError("empty response from Anthropic".into()))?;
+
+    let input_tokens = body["usage"]["input_tokens"].as_u64().unwrap_or(0);
+    let output_tokens = body["usage"]["output_tokens"].as_u64().unwrap_or(0);
+    let cached = body["usage"]["cache_read_input_tokens"]
+        .as_u64()
+        .unwrap_or(0);
+
+    Ok(completion::CompletionResponse {
+        choice,
+        usage: completion::Usage {
+            input_tokens,
+            output_tokens,
+            total_tokens: input_tokens + output_tokens,
+            cached_input_tokens: cached,
+        },
+        raw_response: RawResponse { body },
+    })
+}
+
+fn parse_openai_response(
+    body: serde_json::Value,
+) -> Result<completion::CompletionResponse<RawResponse>, CompletionError> {
+    let choice = &body["choices"][0]["message"];
+
+    let mut assistant_content = Vec::new();
+
+    if let Some(text) = choice["content"].as_str() {
+        if !text.is_empty() {
+            assistant_content.push(AssistantContent::Text(Text {
+                text: text.to_string(),
+            }));
+        }
+    }
+
+    if let Some(tool_calls) = choice["tool_calls"].as_array() {
+        for tc in tool_calls {
+            let id = tc["id"].as_str().unwrap_or("").to_string();
+            let name = tc["function"]["name"].as_str().unwrap_or("").to_string();
+            // OpenAI returns arguments as a JSON string, parse it back to Value
+            let arguments = tc["function"]["arguments"]
+                .as_str()
+                .and_then(|s| serde_json::from_str(s).ok())
+                .unwrap_or(serde_json::json!({}));
+            assistant_content
+                .push(AssistantContent::ToolCall(make_tool_call(id, name, arguments)));
+        }
+    }
+
+    let result_choice = OneOrMany::many(assistant_content)
+        .map_err(|_| CompletionError::ResponseError("empty response from OpenAI".into()))?;
+
+    let input_tokens = body["usage"]["prompt_tokens"].as_u64().unwrap_or(0);
+    let output_tokens = body["usage"]["completion_tokens"].as_u64().unwrap_or(0);
+    let cached = body["usage"]["prompt_tokens_details"]["cached_tokens"]
+        .as_u64()
+        .unwrap_or(0);
+
+    Ok(completion::CompletionResponse {
+        choice: result_choice,
+        usage: completion::Usage {
+            input_tokens,
+            output_tokens,
+            total_tokens: input_tokens + output_tokens,
+            cached_input_tokens: cached,
+        },
+        raw_response: RawResponse { body },
+    })
+}
