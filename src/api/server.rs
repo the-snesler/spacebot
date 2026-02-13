@@ -2,7 +2,7 @@
 
 use super::state::{AgentInfo, ApiEvent, ApiState};
 use crate::conversation::channels::ChannelStore;
-use crate::conversation::history::ConversationLogger;
+use crate::conversation::history::{ProcessRunLogger, TimelineItem};
 
 use axum::extract::{Query, State};
 use axum::http::{header, StatusCode, Uri};
@@ -56,18 +56,8 @@ struct ChannelsResponse {
 }
 
 #[derive(Serialize)]
-struct MessageResponse {
-    id: String,
-    role: String,
-    sender_name: Option<String>,
-    sender_id: Option<String>,
-    content: String,
-    created_at: String,
-}
-
-#[derive(Serialize)]
 struct MessagesResponse {
-    messages: Vec<MessageResponse>,
+    items: Vec<TimelineItem>,
 }
 
 #[derive(Serialize)]
@@ -230,7 +220,8 @@ fn default_message_limit() -> i64 {
     20
 }
 
-/// Get recent messages for a specific channel.
+/// Get the unified timeline for a channel: messages, branch runs, and worker runs
+/// interleaved chronologically.
 async fn channel_messages(
     State(state): State<Arc<ApiState>>,
     Query(query): Query<MessagesQuery>,
@@ -239,31 +230,20 @@ async fn channel_messages(
     let limit = query.limit.min(100);
 
     for (_agent_id, pool) in pools.iter() {
-        let logger = ConversationLogger::new(pool.clone());
-        match logger.load_channel_transcript(&query.channel_id, limit).await {
-            Ok(messages) if !messages.is_empty() => {
-                let result: Vec<MessageResponse> = messages
-                    .into_iter()
-                    .map(|message| MessageResponse {
-                        id: message.id,
-                        role: message.role,
-                        sender_name: message.sender_name,
-                        sender_id: message.sender_id,
-                        content: message.content,
-                        created_at: message.created_at.to_rfc3339(),
-                    })
-                    .collect();
-                return Json(MessagesResponse { messages: result });
+        let logger = ProcessRunLogger::new(pool.clone());
+        match logger.load_channel_timeline(&query.channel_id, limit).await {
+            Ok(items) if !items.is_empty() => {
+                return Json(MessagesResponse { items });
             }
             Ok(_) => continue,
             Err(error) => {
-                tracing::warn!(%error, channel_id = %query.channel_id, "failed to load messages");
+                tracing::warn!(%error, channel_id = %query.channel_id, "failed to load timeline");
                 continue;
             }
         }
     }
 
-    Json(MessagesResponse { messages: vec![] })
+    Json(MessagesResponse { items: vec![] })
 }
 
 /// Get live status (active workers, branches, completed items) for all channels.

@@ -73,7 +73,8 @@ export function ChannelCard({
 	liveState: ChannelLiveState | undefined;
 }) {
 	const isTyping = liveState?.isTyping ?? false;
-	const messages = liveState?.messages ?? [];
+	const timeline = liveState?.timeline ?? [];
+	const messages = timeline.filter((item) => item.type === "message");
 	const workers = Object.values(liveState?.workers ?? {});
 	const branches = Object.values(liveState?.branches ?? {});
 	const visible = messages.slice(-VISIBLE_MESSAGES);
@@ -145,19 +146,22 @@ export function ChannelCard({
 							{messages.length - VISIBLE_MESSAGES} earlier messages
 						</span>
 					)}
-					{visible.map((message) => (
-						<div key={message.id} className="flex gap-2 text-sm">
-							<span className="flex-shrink-0 text-tiny text-ink-faint">
-								{formatTimestamp(message.timestamp)}
-							</span>
-							<span className={`flex-shrink-0 text-tiny font-medium ${
-								message.sender === "user" ? "text-accent-faint" : "text-green-400"
-							}`}>
-								{message.sender === "user" ? (message.senderName ?? "user") : "bot"}
-							</span>
-							<p className="line-clamp-1 text-sm text-ink-dull">{message.text}</p>
-						</div>
-					))}
+					{visible.map((message) => {
+						if (message.type !== "message") return null;
+						return (
+							<div key={message.id} className="flex gap-2 text-sm">
+								<span className="flex-shrink-0 text-tiny text-ink-faint">
+									{formatTimestamp(new Date(message.created_at).getTime())}
+								</span>
+								<span className={`flex-shrink-0 text-tiny font-medium ${
+									message.role === "user" ? "text-accent-faint" : "text-green-400"
+								}`}>
+									{message.role === "user" ? (message.sender_name ?? "user") : "bot"}
+								</span>
+								<p className="line-clamp-1 text-sm text-ink-dul">{message.content}</p>
+							</div>
+						);
+					})}
 				</div>
 			)}
 		</Link>

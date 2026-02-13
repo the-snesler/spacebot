@@ -3,7 +3,7 @@
 use crate::agent::compactor::Compactor;
 use crate::error::{AgentError, Result};
 use crate::llm::SpacebotModel;
-use crate::conversation::{ChannelStore, ConversationLogger};
+use crate::conversation::{ChannelStore, ConversationLogger, ProcessRunLogger};
 use crate::{ChannelId, WorkerId, BranchId, ProcessId, ProcessType, AgentDeps, InboundMessage, ProcessEvent, OutboundResponse};
 use crate::hooks::SpacebotHook;
 use crate::agent::status::StatusBlock;
@@ -36,6 +36,7 @@ pub struct ChannelState {
     pub status_block: Arc<RwLock<StatusBlock>>,
     pub deps: AgentDeps,
     pub conversation_logger: ConversationLogger,
+    pub process_run_logger: ProcessRunLogger,
     pub channel_store: ChannelStore,
     pub screenshot_dir: std::path::PathBuf,
     pub logs_dir: std::path::PathBuf,
@@ -101,6 +102,7 @@ impl Channel {
         let (message_tx, message_rx) = mpsc::channel(64);
 
         let conversation_logger = ConversationLogger::new(deps.sqlite_pool.clone());
+        let process_run_logger = ProcessRunLogger::new(deps.sqlite_pool.clone());
         let channel_store = ChannelStore::new(deps.sqlite_pool.clone());
 
         let compactor = Compactor::new(
@@ -118,6 +120,7 @@ impl Channel {
             status_block: status_block.clone(),
             deps: deps.clone(),
             conversation_logger,
+            process_run_logger,
             channel_store,
             screenshot_dir,
             logs_dir,
@@ -426,9 +429,15 @@ impl Channel {
         }
 
         let mut should_retrigger = false;
-        
+        let run_logger = &self.state.process_run_logger;
+
         match &event {
+            ProcessEvent::BranchStarted { branch_id, channel_id, description, .. } => {
+                run_logger.log_branch_started(channel_id, *branch_id, description);
+            }
             ProcessEvent::BranchResult { branch_id, conclusion, .. } => {
+                run_logger.log_branch_completed(*branch_id, conclusion);
+
                 // Remove from active branches
                 let mut branches = self.state.active_branches.write().await;
                 branches.remove(branch_id);
@@ -448,7 +457,15 @@ impl Channel {
                     tracing::info!(branch_id = %branch_id, "branch result incorporated");
                 }
             }
+            ProcessEvent::WorkerStarted { worker_id, channel_id, task, .. } => {
+                run_logger.log_worker_started(channel_id.as_ref(), *worker_id, task);
+            }
+            ProcessEvent::WorkerStatus { worker_id, status, .. } => {
+                run_logger.log_worker_status(*worker_id, status);
+            }
             ProcessEvent::WorkerComplete { worker_id, result, notify, .. } => {
+                run_logger.log_worker_completed(*worker_id, result);
+
                 let mut workers = self.state.active_workers.write().await;
                 workers.remove(worker_id);
                 drop(workers);

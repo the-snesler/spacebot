@@ -122,7 +122,8 @@ async function fetchJson<T>(path: string): Promise<T> {
 	return response.json();
 }
 
-export interface ConversationMessage {
+export interface TimelineMessage {
+	type: "message";
 	id: string;
 	role: "user" | "assistant";
 	sender_name: string | null;
@@ -131,8 +132,29 @@ export interface ConversationMessage {
 	created_at: string;
 }
 
+export interface TimelineBranchRun {
+	type: "branch_run";
+	id: string;
+	description: string;
+	conclusion: string | null;
+	started_at: string;
+	completed_at: string | null;
+}
+
+export interface TimelineWorkerRun {
+	type: "worker_run";
+	id: string;
+	task: string;
+	result: string | null;
+	status: string;
+	started_at: string;
+	completed_at: string | null;
+}
+
+export type TimelineItem = TimelineMessage | TimelineBranchRun | TimelineWorkerRun;
+
 export interface MessagesResponse {
-	messages: ConversationMessage[];
+	items: TimelineItem[];
 }
 
 export interface WorkerStatusInfo {

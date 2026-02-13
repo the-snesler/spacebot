@@ -5,9 +5,9 @@
 <h1 align="center">Spacebot</h1>
 
 <p align="center">
-  <strong>An agentic system where every LLM process has a dedicated role.</strong><br/>
-  Channels talk. Branches think. Workers execute.<br/>
-  Nothing ever blocks.
+  <strong>An AI agent that actually works in teams and communities.</strong><br/>
+  Handles many users at once. Does real work in the background.<br/>
+  Never blocks. Never goes dark.
 </p>
 
 <p align="center">
@@ -42,6 +42,83 @@ Most AI agent frameworks run everything in a single session. One LLM thread hand
 [OpenClaw](https://github.com/anomalyco/openclaw) _does_ have subagents, but handles them poorly and there's no enforcement to their use. The session is the bottleneck for everything.
 
 Spacebot splits the monolith into specialized processes that only do one thing, and delegate everything else.
+
+---
+
+## Built for Teams and Communities
+
+Most AI agents are built for one person in one conversation. Spacebot is built for many people working together — a Discord community with hundreds of active members, a Slack workspace with teams running parallel workstreams, a Telegram group coordinating across time zones.
+
+This is why the architecture exists. A single-threaded agent breaks the moment two people talk at once. Spacebot's delegation model means it can think about User A's question, execute a task for User B, and respond to User C's small talk — all at the same time, without any of them waiting on each other.
+
+**For communities** — drop Spacebot into a Discord server. It handles concurrent conversations across channels and threads, remembers context about every member, and does real work (code, research, file operations) without going dark. Fifty people can interact with it simultaneously.
+
+**For teams** — connect it to Slack. Each channel gets a dedicated conversation with shared memory. Spacebot can run long coding sessions for one engineer while answering quick questions from another. Workers handle the heavy lifting in the background while the channel stays responsive.
+
+**For multi-agent setups** — run multiple agents on one instance. A community bot with a friendly personality on Discord, a no-nonsense dev assistant on Slack, and a research agent handling background tasks. Each with its own identity, memory, and security permissions. One binary, one deploy.
+
+### Deploy Your Way
+
+| Method | What You Get |
+|--------|-------------|
+| **[spacebot.sh](https://spacebot.sh)** | One-click hosted deploy. Connect your platforms, configure your agent, done. |
+| **Self-hosted** | Single Rust binary. No Docker, no server dependencies, no microservices. Clone, build, run. |
+| **Docker** | Container image with everything included. Mount a volume for persistent data. |
+
+---
+
+## Capabilities
+
+### Task Execution
+
+Workers come loaded with tools for real work:
+
+- **Shell** — run arbitrary commands with configurable timeouts
+- **File** — read, write, and list files with auto-created directories
+- **Exec** — run specific programs with arguments and environment variables
+- **[OpenCode](https://opencode.ai)** — spawn a full coding agent as a persistent worker with codebase exploration, LSP awareness, and deep context management
+- **Browser** — headless Chrome automation with an accessibility-tree ref system. Navigate, click, type, screenshot, manage tabs — the LLM addresses elements by short refs (`e0`, `e1`) instead of fragile CSS selectors
+- **[Brave](https://brave.com/search/api/) web search** — search the web with freshness filters, localization, and configurable result count
+
+### Messaging
+
+Native adapters for Discord and Slack with full platform feature support:
+
+- **Streaming responses** — text appears word-by-word via message edits, not as a wall of text after 30 seconds
+- **File attachments** — send and receive files, images, and documents
+- **Threading** — automatic thread creation for long conversations
+- **Reactions** — emoji reactions on messages
+- **Typing indicators** — visual feedback while the agent is thinking
+- **Message history backfill** — reads recent conversation context on first message
+- **Per-channel permissions** — guild, channel, and DM-level access control, hot-reloadable
+
+### Memory
+
+Long-term structured memory with graph associations and hybrid search:
+
+- **Six memory types** — Fact, Preference, Decision, Identity, Event, Observation
+- **Graph edges** — RelatedTo, Updates, Contradicts, CausedBy, PartOf
+- **Hybrid recall** — vector similarity + full-text search merged via Reciprocal Rank Fusion
+- **File ingestion** — drop text files into the `ingest/` folder, memories are extracted automatically
+- **Cross-channel recall** — branches can read transcripts from other conversations
+- **Memory bulletin** — the cortex generates a periodic briefing of the agent's knowledge, injected into every conversation
+
+### Scheduling
+
+Cron jobs created and managed from conversation or config:
+
+- **Natural scheduling** — "check my inbox every 30 minutes" becomes a cron job with a delivery target
+- **Active hours** — restrict jobs to specific time windows (supports midnight wrapping)
+- **Circuit breaker** — auto-disables after 3 consecutive failures
+- **Full agent capabilities** — each job gets a fresh channel with branching and workers
+
+### Skills
+
+Extensible skill system for domain-specific behavior:
+
+- **SKILL.md format** — markdown files with frontmatter, loaded from instance or agent workspace
+- **Worker injection** — skills are injected into worker system prompts for specialized tasks
+- **OpenClaw compatible** — drop in existing OpenClaw skills
 
 ---
 
@@ -93,7 +170,11 @@ User: "actually, update the tests too"
     → Worker receives follow-up, continues with its existing context
 ```
 
-Workers are pluggable. A worker can be a Rig agent with shell/file tools, an [OpenCode](https://opencode.ai) subprocess, or any external process that accepts a task and reports status.
+Workers are pluggable. Any process that accepts a task and reports status can be a worker.
+
+**Built-in workers** come with shell, file, exec, and browser tools out of the box. They can write code, run commands, manage files, browse the web — enough to build a whole project from scratch.
+
+**[OpenCode](https://opencode.ai) workers** are a built-in integration that spawns a full OpenCode coding agent as a persistent subprocess. OpenCode brings its own codebase exploration, LSP awareness, and context management — purpose-built for deep coding sessions. When a user asks for a complex refactor or a new feature, the channel can spawn an OpenCode worker that maintains a rich understanding of the codebase across the entire session. Both built-in and OpenCode workers support interactive follow-ups.
 
 ### The Compactor
 

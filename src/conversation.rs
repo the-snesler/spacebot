@@ -5,4 +5,4 @@ pub mod history;
 pub mod context;
 
 pub use channels::ChannelStore;
-pub use history::ConversationLogger;
+pub use history::{ConversationLogger, ProcessRunLogger, TimelineItem};

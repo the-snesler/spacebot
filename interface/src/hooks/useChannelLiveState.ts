@@ -5,6 +5,7 @@ import {
 	type BranchStartedEvent,
 	type InboundMessageEvent,
 	type OutboundMessageEvent,
+	type TimelineItem,
 	type ToolCompletedEvent,
 	type ToolStartedEvent,
 	type TypingStateEvent,
@@ -13,14 +14,6 @@ import {
 	type WorkerStatusEvent,
 	type ChannelInfo,
 } from "../api/client";
-
-export interface ChatMessage {
-	id: string;
-	sender: "user" | "bot";
-	senderName?: string;
-	text: string;
-	timestamp: number;
-}
 
 export interface ActiveWorker {
 	id: string;
@@ -42,16 +35,25 @@ export interface ActiveBranch {
 
 export interface ChannelLiveState {
 	isTyping: boolean;
-	messages: ChatMessage[];
+	timeline: TimelineItem[];
 	workers: Record<string, ActiveWorker>;
 	branches: Record<string, ActiveBranch>;
 	historyLoaded: boolean;
 }
 
-const MAX_MESSAGES = 50;
+const MAX_ITEMS = 50;
 
 function emptyLiveState(): ChannelLiveState {
-	return { isTyping: false, messages: [], workers: {}, branches: {}, historyLoaded: false };
+	return { isTyping: false, timeline: [], workers: {}, branches: {}, historyLoaded: false };
+}
+
+/** Get a sortable timestamp from any timeline item. */
+function itemTimestamp(item: TimelineItem): string {
+	switch (item.type) {
+		case "message": return item.created_at;
+		case "branch_run": return item.started_at;
+		case "worker_run": return item.started_at;
+	}
 }
 
 /**
@@ -72,26 +74,22 @@ export function useChannelLiveState(channels: ChannelInfo[]) {
 					[channel.id]: { ...(prev[channel.id] ?? emptyLiveState()), historyLoaded: true },
 				};
 
-				api.channelMessages(channel.id, MAX_MESSAGES).then((data) => {
-					const history: ChatMessage[] = data.messages.map((message) => ({
-						id: message.id,
-						sender: message.role === "user" ? "user" as const : "bot" as const,
-						senderName: message.sender_name ?? (message.role === "user" ? message.sender_id ?? undefined : undefined),
-						text: message.content,
-						timestamp: new Date(message.created_at).getTime(),
-					}));
+				api.channelMessages(channel.id, MAX_ITEMS).then((data) => {
+					const history: TimelineItem[] = data.items;
 
 					setLiveStates((current) => {
 						const existing = current[channel.id];
 						if (!existing) return current;
-						const sseMessages = existing.messages;
-						const lastHistoryTs = history.length > 0 ? history[history.length - 1].timestamp : 0;
-						const newSseMessages = sseMessages.filter((m) => m.timestamp > lastHistoryTs);
+						const sseItems = existing.timeline;
+						const lastHistoryTs = history.length > 0
+							? itemTimestamp(history[history.length - 1])
+							: "";
+						const newSseItems = sseItems.filter((item) => itemTimestamp(item) > lastHistoryTs);
 						return {
 							...current,
 							[channel.id]: {
 								...existing,
-								messages: [...history, ...newSseMessages].slice(-MAX_MESSAGES),
+								timeline: [...history, ...newSseItems].slice(-MAX_ITEMS),
 							},
 						};
 					});
@@ -159,42 +157,58 @@ export function useChannelLiveState(channels: ChannelInfo[]) {
 	const getOrCreate = (prev: Record<string, ChannelLiveState>, channelId: string) =>
 		prev[channelId] ?? emptyLiveState();
 
-	// Helper: push a message into a channel's state
-	const pushMessage = useCallback((channelId: string, message: ChatMessage) => {
+	// Helper: push a timeline item into a channel's state
+	const pushItem = useCallback((channelId: string, item: TimelineItem) => {
 		setLiveStates((prev) => {
 			const existing = getOrCreate(prev, channelId);
-			const messages = [...existing.messages, message].slice(-MAX_MESSAGES);
-			return { ...prev, [channelId]: { ...existing, messages } };
+			const timeline = [...existing.timeline, item].slice(-MAX_ITEMS);
+			return { ...prev, [channelId]: { ...existing, timeline } };
+		});
+	}, []);
+
+	// Helper: update an existing timeline item by id, or ignore if not found
+	const updateItem = useCallback((channelId: string, itemId: string, updater: (item: TimelineItem) => TimelineItem) => {
+		setLiveStates((prev) => {
+			const state = prev[channelId];
+			if (!state) return prev;
+			const timeline = state.timeline.map((item) =>
+				item.id === itemId ? updater(item) : item
+			);
+			return { ...prev, [channelId]: { ...state, timeline } };
 		});
 	}, []);
 
 	// -- SSE event handlers --
-	// Each handler uses channel_id from the event directly.
 
 	const handleInboundMessage = useCallback((data: unknown) => {
 		const event = data as InboundMessageEvent;
-		pushMessage(event.channel_id, {
+		pushItem(event.channel_id, {
+			type: "message",
 			id: `in-${Date.now()}-${crypto.randomUUID()}`,
-			sender: "user",
-			senderName: event.sender_id,
-			text: event.text,
-			timestamp: Date.now(),
+			role: "user",
+			sender_name: event.sender_id,
+			sender_id: event.sender_id,
+			content: event.text,
+			created_at: new Date().toISOString(),
 		});
-	}, [pushMessage]);
+	}, [pushItem]);
 
 	const handleOutboundMessage = useCallback((data: unknown) => {
 		const event = data as OutboundMessageEvent;
-		pushMessage(event.channel_id, {
+		pushItem(event.channel_id, {
+			type: "message",
 			id: `out-${Date.now()}-${crypto.randomUUID()}`,
-			sender: "bot",
-			text: event.text,
-			timestamp: Date.now(),
+			role: "assistant",
+			sender_name: null,
+			sender_id: null,
+			content: event.text,
+			created_at: new Date().toISOString(),
 		});
 		setLiveStates((prev) => {
 			const existing = getOrCreate(prev, event.channel_id);
 			return { ...prev, [event.channel_id]: { ...existing, isTyping: false } };
 		});
-	}, [pushMessage]);
+	}, [pushItem]);
 
 	const handleTypingState = useCallback((data: unknown) => {
 		const event = data as TypingStateEvent;
@@ -207,11 +221,14 @@ export function useChannelLiveState(channels: ChannelInfo[]) {
 	const handleWorkerStarted = useCallback((data: unknown) => {
 		const event = data as WorkerStartedEvent;
 		if (!event.channel_id) return;
+		const channelId = event.channel_id;
+
+		// Add to active workers (for activity bar)
 		setLiveStates((prev) => {
-			const existing = getOrCreate(prev, event.channel_id!);
+			const existing = getOrCreate(prev, channelId);
 			return {
 				...prev,
-				[event.channel_id!]: {
+				[channelId]: {
 					...existing,
 					workers: {
 						...existing.workers,
@@ -227,7 +244,18 @@ export function useChannelLiveState(channels: ChannelInfo[]) {
 				},
 			};
 		});
-	}, []);
+
+		// Insert timeline item
+		pushItem(channelId, {
+			type: "worker_run",
+			id: event.worker_id,
+			task: event.task,
+			result: null,
+			status: "running",
+			started_at: new Date().toISOString(),
+			completed_at: null,
+		});
+	}, [pushItem]);
 
 	const handleWorkerStatus = useCallback((data: unknown) => {
 		const event = data as WorkerStatusEvent;
@@ -247,6 +275,11 @@ export function useChannelLiveState(channels: ChannelInfo[]) {
 						},
 					},
 				};
+			});
+			// Update timeline item status
+			updateItem(event.channel_id, event.worker_id, (item) => {
+				if (item.type !== "worker_run") return item;
+				return { ...item, status: event.status };
 			});
 		} else {
 			// Fallback scan for workers without a channel
@@ -269,7 +302,7 @@ export function useChannelLiveState(channels: ChannelInfo[]) {
 				return prev;
 			});
 		}
-	}, []);
+	}, [updateItem]);
 
 	const handleWorkerCompleted = useCallback((data: unknown) => {
 		const event = data as WorkerCompletedEvent;
@@ -282,6 +315,11 @@ export function useChannelLiveState(channels: ChannelInfo[]) {
 					...prev,
 					[event.channel_id!]: { ...state, workers: remainingWorkers },
 				};
+			});
+			// Update timeline item with result
+			updateItem(event.channel_id, event.worker_id, (item) => {
+				if (item.type !== "worker_run") return item;
+				return { ...item, result: event.result, status: "done", completed_at: new Date().toISOString() };
 			});
 		} else {
 			setLiveStates((prev) => {
@@ -297,10 +335,12 @@ export function useChannelLiveState(channels: ChannelInfo[]) {
 				return prev;
 			});
 		}
-	}, []);
+	}, [updateItem]);
 
 	const handleBranchStarted = useCallback((data: unknown) => {
 		const event = data as BranchStartedEvent;
+
+		// Add to active branches (for activity bar)
 		setLiveStates((prev) => {
 			const existing = getOrCreate(prev, event.channel_id);
 			return {
@@ -321,10 +361,22 @@ export function useChannelLiveState(channels: ChannelInfo[]) {
 				},
 			};
 		});
-	}, []);
+
+		// Insert timeline item
+		pushItem(event.channel_id, {
+			type: "branch_run",
+			id: event.branch_id,
+			description: event.description || "thinking...",
+			conclusion: null,
+			started_at: new Date().toISOString(),
+			completed_at: null,
+		});
+	}, [pushItem]);
 
 	const handleBranchCompleted = useCallback((data: unknown) => {
 		const event = data as BranchCompletedEvent;
+
+		// Remove from active branches
 		setLiveStates((prev) => {
 			const state = prev[event.channel_id];
 			if (!state?.branches[event.branch_id]) return prev;
@@ -334,7 +386,13 @@ export function useChannelLiveState(channels: ChannelInfo[]) {
 				[event.channel_id]: { ...state, branches: remainingBranches },
 			};
 		});
-	}, []);
+
+		// Update timeline item with conclusion
+		updateItem(event.channel_id, event.branch_id, (item) => {
+			if (item.type !== "branch_run") return item;
+			return { ...item, conclusion: event.conclusion, completed_at: new Date().toISOString() };
+		});
+	}, [updateItem]);
 
 	const handleToolStarted = useCallback((data: unknown) => {
 		const event = data as ToolStartedEvent;

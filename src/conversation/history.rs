@@ -1,6 +1,8 @@
 //! Conversation message persistence (SQLite).
 
-use crate::ChannelId;
+use crate::{BranchId, ChannelId, WorkerId};
+
+use serde::Serialize;
 use sqlx::{Row as _, SqlitePool};
 use std::collections::HashMap;
 
@@ -166,4 +168,230 @@ impl ConversationLogger {
         Ok(messages)
     }
 
+}
+
+/// A unified timeline item combining messages, branch runs, and worker runs.
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum TimelineItem {
+    Message {
+        id: String,
+        role: String,
+        sender_name: Option<String>,
+        sender_id: Option<String>,
+        content: String,
+        created_at: String,
+    },
+    BranchRun {
+        id: String,
+        description: String,
+        conclusion: Option<String>,
+        started_at: String,
+        completed_at: Option<String>,
+    },
+    WorkerRun {
+        id: String,
+        task: String,
+        result: Option<String>,
+        status: String,
+        started_at: String,
+        completed_at: Option<String>,
+    },
+}
+
+/// Persists branch and worker run records for channel timeline history.
+///
+/// All write methods are fire-and-forget, same pattern as ConversationLogger.
+#[derive(Debug, Clone)]
+pub struct ProcessRunLogger {
+    pool: SqlitePool,
+}
+
+impl ProcessRunLogger {
+    pub fn new(pool: SqlitePool) -> Self {
+        Self { pool }
+    }
+
+    /// Record a branch starting. Fire-and-forget.
+    pub fn log_branch_started(&self, channel_id: &ChannelId, branch_id: BranchId, description: &str) {
+        let pool = self.pool.clone();
+        let id = branch_id.to_string();
+        let channel_id = channel_id.to_string();
+        let description = description.to_string();
+
+        tokio::spawn(async move {
+            if let Err(error) = sqlx::query(
+                "INSERT INTO branch_runs (id, channel_id, description) VALUES (?, ?, ?)"
+            )
+            .bind(&id)
+            .bind(&channel_id)
+            .bind(&description)
+            .execute(&pool)
+            .await
+            {
+                tracing::warn!(%error, branch_id = %id, "failed to persist branch start");
+            }
+        });
+    }
+
+    /// Record a branch completing with its conclusion. Fire-and-forget.
+    pub fn log_branch_completed(&self, branch_id: BranchId, conclusion: &str) {
+        let pool = self.pool.clone();
+        let id = branch_id.to_string();
+        let conclusion = conclusion.to_string();
+
+        tokio::spawn(async move {
+            if let Err(error) = sqlx::query(
+                "UPDATE branch_runs SET conclusion = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?"
+            )
+            .bind(&conclusion)
+            .bind(&id)
+            .execute(&pool)
+            .await
+            {
+                tracing::warn!(%error, branch_id = %id, "failed to persist branch completion");
+            }
+        });
+    }
+
+    /// Record a worker starting. Fire-and-forget.
+    pub fn log_worker_started(&self, channel_id: Option<&ChannelId>, worker_id: WorkerId, task: &str) {
+        let pool = self.pool.clone();
+        let id = worker_id.to_string();
+        let channel_id = channel_id.map(|c| c.to_string());
+        let task = task.to_string();
+
+        tokio::spawn(async move {
+            if let Err(error) = sqlx::query(
+                "INSERT INTO worker_runs (id, channel_id, task) VALUES (?, ?, ?)"
+            )
+            .bind(&id)
+            .bind(&channel_id)
+            .bind(&task)
+            .execute(&pool)
+            .await
+            {
+                tracing::warn!(%error, worker_id = %id, "failed to persist worker start");
+            }
+        });
+    }
+
+    /// Update a worker's status. Fire-and-forget.
+    pub fn log_worker_status(&self, worker_id: WorkerId, status: &str) {
+        let pool = self.pool.clone();
+        let id = worker_id.to_string();
+        let status = status.to_string();
+
+        tokio::spawn(async move {
+            if let Err(error) = sqlx::query(
+                "UPDATE worker_runs SET status = ? WHERE id = ?"
+            )
+            .bind(&status)
+            .bind(&id)
+            .execute(&pool)
+            .await
+            {
+                tracing::warn!(%error, worker_id = %id, "failed to persist worker status");
+            }
+        });
+    }
+
+    /// Record a worker completing with its result. Fire-and-forget.
+    pub fn log_worker_completed(&self, worker_id: WorkerId, result: &str) {
+        let pool = self.pool.clone();
+        let id = worker_id.to_string();
+        let result = result.to_string();
+
+        tokio::spawn(async move {
+            if let Err(error) = sqlx::query(
+                "UPDATE worker_runs SET result = ?, status = 'done', completed_at = CURRENT_TIMESTAMP WHERE id = ?"
+            )
+            .bind(&result)
+            .bind(&id)
+            .execute(&pool)
+            .await
+            {
+                tracing::warn!(%error, worker_id = %id, "failed to persist worker completion");
+            }
+        });
+    }
+
+    /// Load a unified timeline for a channel: messages, branch runs, and worker runs
+    /// interleaved chronologically (oldest first).
+    pub async fn load_channel_timeline(
+        &self,
+        channel_id: &str,
+        limit: i64,
+    ) -> crate::error::Result<Vec<TimelineItem>> {
+        let rows = sqlx::query(
+            "SELECT * FROM ( \
+                SELECT 'message' AS item_type, id, role, sender_name, sender_id, content, \
+                       NULL AS description, NULL AS conclusion, NULL AS task, NULL AS result, NULL AS status, \
+                       created_at AS timestamp, NULL AS completed_at \
+                FROM conversation_messages WHERE channel_id = ?1 \
+                UNION ALL \
+                SELECT 'branch_run' AS item_type, id, NULL, NULL, NULL, NULL, \
+                       description, conclusion, NULL, NULL, NULL, \
+                       started_at AS timestamp, completed_at \
+                FROM branch_runs WHERE channel_id = ?1 \
+                UNION ALL \
+                SELECT 'worker_run' AS item_type, id, NULL, NULL, NULL, NULL, \
+                       NULL, NULL, task, result, status, \
+                       started_at AS timestamp, completed_at \
+                FROM worker_runs WHERE channel_id = ?1 \
+            ) ORDER BY timestamp DESC LIMIT ?2"
+        )
+        .bind(channel_id)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| anyhow::anyhow!(e))?;
+
+        let mut items: Vec<TimelineItem> = rows
+            .into_iter()
+            .filter_map(|row| {
+                let item_type: String = row.try_get("item_type").ok()?;
+                match item_type.as_str() {
+                    "message" => Some(TimelineItem::Message {
+                        id: row.try_get("id").unwrap_or_default(),
+                        role: row.try_get("role").unwrap_or_default(),
+                        sender_name: row.try_get("sender_name").ok(),
+                        sender_id: row.try_get("sender_id").ok(),
+                        content: row.try_get("content").unwrap_or_default(),
+                        created_at: row.try_get::<chrono::DateTime<chrono::Utc>, _>("timestamp")
+                            .map(|t| t.to_rfc3339())
+                            .unwrap_or_default(),
+                    }),
+                    "branch_run" => Some(TimelineItem::BranchRun {
+                        id: row.try_get("id").unwrap_or_default(),
+                        description: row.try_get("description").unwrap_or_default(),
+                        conclusion: row.try_get("conclusion").ok(),
+                        started_at: row.try_get::<chrono::DateTime<chrono::Utc>, _>("timestamp")
+                            .map(|t| t.to_rfc3339())
+                            .unwrap_or_default(),
+                        completed_at: row.try_get::<chrono::DateTime<chrono::Utc>, _>("completed_at")
+                            .ok()
+                            .map(|t| t.to_rfc3339()),
+                    }),
+                    "worker_run" => Some(TimelineItem::WorkerRun {
+                        id: row.try_get("id").unwrap_or_default(),
+                        task: row.try_get("task").unwrap_or_default(),
+                        result: row.try_get("result").ok(),
+                        status: row.try_get("status").unwrap_or_default(),
+                        started_at: row.try_get::<chrono::DateTime<chrono::Utc>, _>("timestamp")
+                            .map(|t| t.to_rfc3339())
+                            .unwrap_or_default(),
+                        completed_at: row.try_get::<chrono::DateTime<chrono::Utc>, _>("completed_at")
+                            .ok()
+                            .map(|t| t.to_rfc3339()),
+                    }),
+                    _ => None,
+                }
+            })
+            .collect();
+
+        // Reverse to chronological order
+        items.reverse();
+        Ok(items)
+    }
 }
