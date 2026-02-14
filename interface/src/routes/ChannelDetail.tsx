@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "framer-motion";
-import type { ChannelInfo, TimelineItem, TimelineBranchRun, TimelineWorkerRun } from "@/api/client";
+import { api, type ChannelInfo, type TimelineItem, type TimelineBranchRun, type TimelineWorkerRun } from "@/api/client";
 import type { ChannelLiveState, ActiveWorker, ActiveBranch } from "@/hooks/useChannelLiveState";
 import { CortexChatPanel } from "@/components/CortexChatPanel";
 import { LiveDuration } from "@/components/LiveDuration";
@@ -16,7 +16,28 @@ interface ChannelDetailProps {
 	onLoadMore: () => void;
 }
 
-function LiveBranchRunItem({ item, live }: { item: TimelineBranchRun; live: ActiveBranch }) {
+function CancelButton({ onClick }: { onClick: () => void }) {
+	const [cancelling, setCancelling] = useState(false);
+	return (
+		<button
+			type="button"
+			disabled={cancelling}
+			onClick={(e) => {
+				e.stopPropagation();
+				setCancelling(true);
+				onClick();
+			}}
+			className="ml-auto flex-shrink-0 rounded p-1 text-ink-faint/50 transition-colors hover:bg-red-500/15 hover:text-red-400 disabled:opacity-40"
+			title="Cancel"
+		>
+			<svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
+				<path d="M4 4l8 8M12 4l-8 8" />
+			</svg>
+		</button>
+	);
+}
+
+function LiveBranchRunItem({ item, live, channelId }: { item: TimelineBranchRun; live: ActiveBranch; channelId: string }) {
 	const displayTool = live.currentTool ?? live.lastTool;
 	return (
 		<div className="flex gap-3 px-3 py-2">
@@ -29,6 +50,7 @@ function LiveBranchRunItem({ item, live }: { item: TimelineBranchRun; live: Acti
 						<div className="h-2 w-2 animate-pulse rounded-full bg-violet-400" />
 						<span className="text-sm font-medium text-violet-300">Branch</span>
 						<span className="truncate text-sm text-ink-dull">{item.description}</span>
+						<CancelButton onClick={() => { api.cancelProcess(channelId, "branch", item.id).catch(console.warn); }} />
 					</div>
 					<div className="mt-1 flex items-center gap-3 pl-4 text-tiny text-ink-faint">
 						<LiveDuration startMs={live.startedAt} />
@@ -45,7 +67,7 @@ function LiveBranchRunItem({ item, live }: { item: TimelineBranchRun; live: Acti
 	);
 }
 
-function LiveWorkerRunItem({ item, live }: { item: TimelineWorkerRun; live: ActiveWorker }) {
+function LiveWorkerRunItem({ item, live, channelId }: { item: TimelineWorkerRun; live: ActiveWorker; channelId: string }) {
 	return (
 		<div className="flex gap-3 px-3 py-2">
 			<span className="flex-shrink-0 pt-0.5 text-tiny text-ink-faint">
@@ -57,6 +79,7 @@ function LiveWorkerRunItem({ item, live }: { item: TimelineWorkerRun; live: Acti
 						<div className="h-2 w-2 animate-pulse rounded-full bg-amber-400" />
 						<span className="text-sm font-medium text-amber-300">Worker</span>
 						<span className="truncate text-sm text-ink-dull">{item.task}</span>
+						<CancelButton onClick={() => { api.cancelProcess(channelId, "worker", item.id).catch(console.warn); }} />
 					</div>
 					<div className="mt-1 flex items-center gap-3 pl-4 text-tiny text-ink-faint">
 						<span>{live.status}</span>
@@ -147,10 +170,11 @@ function WorkerRunItem({ item }: { item: TimelineWorkerRun }) {
 	);
 }
 
-function TimelineEntry({ item, liveWorkers, liveBranches }: {
+function TimelineEntry({ item, liveWorkers, liveBranches, channelId }: {
 	item: TimelineItem;
 	liveWorkers: Record<string, ActiveWorker>;
 	liveBranches: Record<string, ActiveBranch>;
+	channelId: string;
 }) {
 	switch (item.type) {
 		case "message":
@@ -177,12 +201,12 @@ function TimelineEntry({ item, liveWorkers, liveBranches }: {
 			);
 		case "branch_run": {
 			const live = liveBranches[item.id];
-			if (live) return <LiveBranchRunItem item={item} live={live} />;
+			if (live) return <LiveBranchRunItem item={item} live={live} channelId={channelId} />;
 			return <BranchRunItem item={item} />;
 		}
 		case "worker_run": {
 			const live = liveWorkers[item.id];
-			if (live) return <LiveWorkerRunItem item={item} live={live} />;
+			if (live) return <LiveWorkerRunItem item={item} live={live} channelId={channelId} />;
 			return <WorkerRunItem item={item} />;
 		}
 	}
@@ -315,6 +339,7 @@ export function ChannelDetail({ agentId, channelId, channel, liveState, onLoadMo
 									item={item}
 									liveWorkers={workers}
 									liveBranches={branches}
+									channelId={channelId}
 								/>
 							))
 						)}

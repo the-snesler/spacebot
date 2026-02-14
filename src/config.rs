@@ -62,6 +62,7 @@ pub struct LlmConfig {
 pub struct DefaultsConfig {
     pub routing: RoutingConfig,
     pub max_concurrent_branches: usize,
+    pub max_concurrent_workers: usize,
     pub max_turns: usize,
     pub branch_max_turns: usize,
     pub context_window: usize,
@@ -274,6 +275,7 @@ pub struct AgentConfig {
     /// Per-agent routing overrides. None inherits from defaults.
     pub routing: Option<RoutingConfig>,
     pub max_concurrent_branches: Option<usize>,
+    pub max_concurrent_workers: Option<usize>,
     pub max_turns: Option<usize>,
     pub branch_max_turns: Option<usize>,
     pub context_window: Option<usize>,
@@ -311,6 +313,7 @@ pub struct ResolvedAgentConfig {
     pub archives_dir: PathBuf,
     pub routing: RoutingConfig,
     pub max_concurrent_branches: usize,
+    pub max_concurrent_workers: usize,
     pub max_turns: usize,
     pub branch_max_turns: usize,
     pub context_window: usize,
@@ -331,6 +334,7 @@ impl Default for DefaultsConfig {
         Self {
             routing: RoutingConfig::default(),
             max_concurrent_branches: 5,
+            max_concurrent_workers: 5,
             max_turns: 5,
             branch_max_turns: 50,
             context_window: 128_000,
@@ -369,6 +373,9 @@ impl AgentConfig {
             max_concurrent_branches: self
                 .max_concurrent_branches
                 .unwrap_or(defaults.max_concurrent_branches),
+            max_concurrent_workers: self
+                .max_concurrent_workers
+                .unwrap_or(defaults.max_concurrent_workers),
             max_turns: self.max_turns.unwrap_or(defaults.max_turns),
             branch_max_turns: self.branch_max_turns.unwrap_or(defaults.branch_max_turns),
             context_window: self.context_window.unwrap_or(defaults.context_window),
@@ -768,6 +775,7 @@ struct TomlLlmConfig {
 struct TomlDefaultsConfig {
     routing: Option<TomlRoutingConfig>,
     max_concurrent_branches: Option<usize>,
+    max_concurrent_workers: Option<usize>,
     max_turns: Option<usize>,
     branch_max_turns: Option<usize>,
     context_window: Option<usize>,
@@ -870,6 +878,7 @@ struct TomlAgentConfig {
     workspace: Option<String>,
     routing: Option<TomlRoutingConfig>,
     max_concurrent_branches: Option<usize>,
+    max_concurrent_workers: Option<usize>,
     max_turns: Option<usize>,
     branch_max_turns: Option<usize>,
     context_window: Option<usize>,
@@ -1068,6 +1077,7 @@ impl Config {
             workspace: None,
             routing: Some(routing),
             max_concurrent_branches: None,
+            max_concurrent_workers: None,
             max_turns: None,
             branch_max_turns: None,
             context_window: None,
@@ -1128,6 +1138,10 @@ impl Config {
                 .defaults
                 .max_concurrent_branches
                 .unwrap_or(base_defaults.max_concurrent_branches),
+            max_concurrent_workers: toml
+                .defaults
+                .max_concurrent_workers
+                .unwrap_or(base_defaults.max_concurrent_workers),
             max_turns: toml.defaults.max_turns.unwrap_or(base_defaults.max_turns),
             branch_max_turns: toml
                 .defaults
@@ -1312,6 +1326,7 @@ impl Config {
                     workspace: a.workspace.map(PathBuf::from),
                     routing: agent_routing,
                     max_concurrent_branches: a.max_concurrent_branches,
+                    max_concurrent_workers: a.max_concurrent_workers,
                     max_turns: a.max_turns,
                     branch_max_turns: a.branch_max_turns,
                     context_window: a.context_window,
@@ -1334,6 +1349,7 @@ impl Config {
                 workspace: None,
                 routing: None,
                 max_concurrent_branches: None,
+                max_concurrent_workers: None,
                 max_turns: None,
                 branch_max_turns: None,
                 context_window: None,
@@ -1466,6 +1482,7 @@ pub struct RuntimeConfig {
     pub branch_max_turns: ArcSwap<usize>,
     pub context_window: ArcSwap<usize>,
     pub max_concurrent_branches: ArcSwap<usize>,
+    pub max_concurrent_workers: ArcSwap<usize>,
     pub browser_config: ArcSwap<BrowserConfig>,
     pub history_backfill_count: ArcSwap<usize>,
     pub brave_search_key: ArcSwap<Option<String>>,
@@ -1516,6 +1533,7 @@ impl RuntimeConfig {
             branch_max_turns: ArcSwap::from_pointee(agent_config.branch_max_turns),
             context_window: ArcSwap::from_pointee(agent_config.context_window),
             max_concurrent_branches: ArcSwap::from_pointee(agent_config.max_concurrent_branches),
+            max_concurrent_workers: ArcSwap::from_pointee(agent_config.max_concurrent_workers),
             browser_config: ArcSwap::from_pointee(agent_config.browser.clone()),
             history_backfill_count: ArcSwap::from_pointee(agent_config.history_backfill_count),
             brave_search_key: ArcSwap::from_pointee(agent_config.brave_search_key.clone()),
@@ -1573,6 +1591,8 @@ impl RuntimeConfig {
         self.context_window.store(Arc::new(resolved.context_window));
         self.max_concurrent_branches
             .store(Arc::new(resolved.max_concurrent_branches));
+        self.max_concurrent_workers
+            .store(Arc::new(resolved.max_concurrent_workers));
         self.browser_config.store(Arc::new(resolved.browser));
         self.history_backfill_count
             .store(Arc::new(resolved.history_backfill_count));

@@ -436,6 +436,14 @@ function ConfigSectionEditor({ sectionId, label, description, detail, config, sa
 							max={20}
 						/>
 						<ConfigNumberField
+							label="Max Concurrent Workers"
+							description="Maximum workers per channel"
+							value={localValues.max_concurrent_workers as number}
+							onChange={(v) => handleChange("max_concurrent_workers", v)}
+							min={1}
+							max={20}
+						/>
+						<ConfigNumberField
 							label="Max Turns"
 							description="Max LLM turns per channel message"
 							value={localValues.max_turns as number}

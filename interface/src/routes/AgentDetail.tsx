@@ -171,6 +171,7 @@ export function AgentDetail({ agentId, liveStates }: AgentDetailProps) {
 								<StatRow label="Context Window" value={agent.context_window.toLocaleString()} />
 								<StatRow label="Max Turns" value={String(agent.max_turns)} />
 								<StatRow label="Max Branches" value={String(agent.max_concurrent_branches)} />
+								<StatRow label="Max Workers" value={String(agent.max_concurrent_workers)} />
 								<StatRow label="Workspace" value={agent.workspace} truncate />
 							</div>
 						</div>

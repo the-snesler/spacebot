@@ -1,5 +1,6 @@
 //! Shared state for the HTTP API.
 
+use crate::agent::channel::ChannelState;
 use crate::agent::cortex_chat::CortexChatSession;
 use crate::agent::status::StatusBlock;
 use crate::config::{DiscordPermissions, RuntimeConfig};
@@ -24,6 +25,7 @@ pub struct AgentInfo {
     pub context_window: usize,
     pub max_turns: usize,
     pub max_concurrent_branches: usize,
+    pub max_concurrent_workers: usize,
 }
 
 /// State shared across all API handlers.
@@ -39,6 +41,9 @@ pub struct ApiState {
     pub memory_searches: arc_swap::ArcSwap<HashMap<String, Arc<MemorySearch>>>,
     /// Live status blocks for active channels, keyed by channel_id.
     pub channel_status_blocks: RwLock<HashMap<String, Arc<tokio::sync::RwLock<StatusBlock>>>>,
+    /// Live channel states for active channels, keyed by channel_id.
+    /// Used by the cancel API to abort workers and branches.
+    pub channel_states: RwLock<HashMap<String, ChannelState>>,
     /// Per-agent cortex chat sessions.
     pub cortex_chat_sessions: arc_swap::ArcSwap<HashMap<String, Arc<CortexChatSession>>>,
     /// Per-agent workspace paths for identity file access.
@@ -141,6 +146,7 @@ impl ApiState {
             agent_configs: arc_swap::ArcSwap::from_pointee(Vec::new()),
             memory_searches: arc_swap::ArcSwap::from_pointee(HashMap::new()),
             channel_status_blocks: RwLock::new(HashMap::new()),
+            channel_states: RwLock::new(HashMap::new()),
             cortex_chat_sessions: arc_swap::ArcSwap::from_pointee(HashMap::new()),
             agent_workspaces: arc_swap::ArcSwap::from_pointee(HashMap::new()),
             config_path: RwLock::new(PathBuf::new()),
@@ -169,6 +175,16 @@ impl ApiState {
             .write()
             .await
             .remove(channel_id);
+    }
+
+    /// Register a channel's state for API-driven cancellation.
+    pub async fn register_channel_state(&self, channel_id: String, state: ChannelState) {
+        self.channel_states.write().await.insert(channel_id, state);
+    }
+
+    /// Remove a channel's state when it's dropped.
+    pub async fn unregister_channel_state(&self, channel_id: &str) {
+        self.channel_states.write().await.remove(channel_id);
     }
 
     /// Register an agent's event stream. Spawns a task that forwards

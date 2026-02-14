@@ -414,6 +414,7 @@ async fn run(config: spacebot::config::Config, foreground: bool) -> anyhow::Resu
                 context_window: agent.config.context_window,
                 max_turns: agent.config.max_turns,
                 max_concurrent_branches: agent.config.max_concurrent_branches,
+                max_concurrent_workers: agent.config.max_concurrent_workers,
             });
         }
         api_state.set_agent_pools(agent_pools);
@@ -665,6 +666,12 @@ async fn run(config: spacebot::config::Config, foreground: bool) -> anyhow::Resu
                     api_state.register_channel_status(
                         conversation_id.clone(),
                         channel.state.status_block.clone(),
+                    ).await;
+
+                    // Register the channel state for API-driven cancellation
+                    api_state.register_channel_state(
+                        conversation_id.clone(),
+                        channel.state.clone(),
                     ).await;
 
                     // Backfill recent message history from the platform

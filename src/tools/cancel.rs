@@ -87,21 +87,14 @@ impl Tool for CancelTool {
             "branch" => {
                 let branch_id = args.process_id.parse::<BranchId>()
                     .map_err(|e| CancelError(format!("Invalid branch ID: {e}")))?;
-                let mut branches = self.state.active_branches.write().await;
-                if let Some(handle) = branches.remove(&branch_id) {
-                    handle.abort();
-                } else {
-                    return Err(CancelError(format!("Branch {branch_id} not found")));
-                }
+                self.state.cancel_branch(branch_id).await
+                    .map_err(CancelError)?;
             }
             "worker" => {
                 let worker_id = args.process_id.parse::<WorkerId>()
                     .map_err(|e| CancelError(format!("Invalid worker ID: {e}")))?;
-                let mut workers = self.state.active_workers.write().await;
-                if workers.remove(&worker_id).is_none() {
-                    return Err(CancelError(format!("Worker {worker_id} not found")));
-                }
-                // The worker's tokio task will be dropped when the Worker struct is dropped
+                self.state.cancel_worker(worker_id).await
+                    .map_err(CancelError)?;
             }
             other => return Err(CancelError(format!("Unknown process type: {other}"))),
         }

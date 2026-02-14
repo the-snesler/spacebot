@@ -220,6 +220,7 @@ struct RoutingSection {
 #[derive(Serialize, Debug)]
 struct TuningSection {
     max_concurrent_branches: usize,
+    max_concurrent_workers: usize,
     max_turns: usize,
     branch_max_turns: usize,
     context_window: usize,
@@ -323,6 +324,7 @@ struct RoutingUpdate {
 #[derive(Deserialize, Debug)]
 struct TuningUpdate {
     max_concurrent_branches: Option<usize>,
+    max_concurrent_workers: Option<usize>,
     max_turns: Option<usize>,
     branch_max_turns: Option<usize>,
     context_window: Option<usize>,
@@ -408,7 +410,8 @@ pub async fn start_http_server(
         .route("/agents/cron", get(list_cron_jobs).post(create_or_update_cron).delete(delete_cron))
         .route("/agents/cron/executions", get(cron_executions))
         .route("/agents/cron/trigger", post(trigger_cron))
-        .route("/agents/cron/toggle", put(toggle_cron));
+        .route("/agents/cron/toggle", put(toggle_cron))
+        .route("/channels/cancel", post(cancel_process));
 
     let app = Router::new()
         .nest("/api", api_routes)
@@ -1172,6 +1175,7 @@ async fn get_agent_config(
         },
         tuning: TuningSection {
             max_concurrent_branches: **rc.max_concurrent_branches.load(),
+            max_concurrent_workers: **rc.max_concurrent_workers.load(),
             max_turns: **rc.max_turns.load(),
             branch_max_turns: **rc.branch_max_turns.load(),
             context_window: **rc.context_window.load(),
@@ -1294,7 +1298,20 @@ async fn update_agent_config(
 
     tracing::info!(agent_id = %request.agent_id, "config.toml updated via API");
 
-    // Return the current config (will be re-fetched on next request after hot-reload)
+    // Immediately reload RuntimeConfig so the response reflects the new values
+    // (the file watcher will also pick this up, but has a 2s debounce)
+    match crate::config::Config::load_from_path(&config_path) {
+        Ok(new_config) => {
+            let runtime_configs = state.runtime_configs.load();
+            if let Some(rc) = runtime_configs.get(&request.agent_id) {
+                rc.reload_config(&new_config, &request.agent_id);
+            }
+        }
+        Err(error) => {
+            tracing::warn!(%error, "config.toml written but failed to reload immediately");
+        }
+    }
+
     get_agent_config(State(state), Query(AgentConfigQuery { agent_id: request.agent_id })).await
 }
 
@@ -1353,6 +1370,7 @@ fn update_routing_table(doc: &mut toml_edit::DocumentMut, agent_idx: usize, rout
 fn update_tuning_table(doc: &mut toml_edit::DocumentMut, agent_idx: usize, tuning: &TuningUpdate) -> Result<(), StatusCode> {
     let agent = get_agent_table_mut(doc, agent_idx)?;
     if let Some(v) = tuning.max_concurrent_branches { agent["max_concurrent_branches"] = toml_edit::value(v as i64); }
+    if let Some(v) = tuning.max_concurrent_workers { agent["max_concurrent_workers"] = toml_edit::value(v as i64); }
     if let Some(v) = tuning.max_turns { agent["max_turns"] = toml_edit::value(v as i64); }
     if let Some(v) = tuning.branch_max_turns { agent["branch_max_turns"] = toml_edit::value(v as i64); }
     if let Some(v) = tuning.context_window { agent["context_window"] = toml_edit::value(v as i64); }
@@ -1751,6 +1769,54 @@ async fn toggle_cron(
         success: true,
         message: format!("Cron job '{}' {}", request.cron_id, status),
     }))
+}
+
+// -- Process cancellation --
+
+#[derive(Deserialize)]
+struct CancelProcessRequest {
+    channel_id: String,
+    process_type: String,
+    process_id: String,
+}
+
+#[derive(Serialize)]
+struct CancelProcessResponse {
+    success: bool,
+    message: String,
+}
+
+/// Cancel a running worker or branch via the API.
+async fn cancel_process(
+    State(state): State<Arc<ApiState>>,
+    Json(request): Json<CancelProcessRequest>,
+) -> Result<Json<CancelProcessResponse>, StatusCode> {
+    let states = state.channel_states.read().await;
+    let channel_state = states.get(&request.channel_id).ok_or(StatusCode::NOT_FOUND)?;
+
+    match request.process_type.as_str() {
+        "worker" => {
+            let worker_id: crate::WorkerId = request.process_id.parse()
+                .map_err(|_| StatusCode::BAD_REQUEST)?;
+            channel_state.cancel_worker(worker_id).await
+                .map_err(|_| StatusCode::NOT_FOUND)?;
+            Ok(Json(CancelProcessResponse {
+                success: true,
+                message: format!("Worker {} cancelled", request.process_id),
+            }))
+        }
+        "branch" => {
+            let branch_id: crate::BranchId = request.process_id.parse()
+                .map_err(|_| StatusCode::BAD_REQUEST)?;
+            channel_state.cancel_branch(branch_id).await
+                .map_err(|_| StatusCode::NOT_FOUND)?;
+            Ok(Json(CancelProcessResponse {
+                success: true,
+                message: format!("Branch {} cancelled", request.process_id),
+            }))
+        }
+        _ => Err(StatusCode::BAD_REQUEST),
+    }
 }
 
 // -- Static file serving --

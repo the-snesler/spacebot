@@ -148,6 +148,9 @@ pub enum AgentError {
     #[error("max concurrent branches ({max}) reached for channel {channel_id}")]
     BranchLimitReached { channel_id: String, max: usize },
 
+    #[error("max concurrent workers ({max}) reached for channel {channel_id}")]
+    WorkerLimitReached { channel_id: String, max: usize },
+
     #[error("worker state transition failed: {0}")]
     InvalidStateTransition(String),
 

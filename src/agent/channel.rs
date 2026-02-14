@@ -30,6 +30,8 @@ pub struct ChannelState {
     pub history: Arc<RwLock<Vec<rig::message::Message>>>,
     pub active_branches: Arc<RwLock<HashMap<BranchId, tokio::task::JoinHandle<()>>>>,
     pub active_workers: Arc<RwLock<HashMap<WorkerId, Worker>>>,
+    /// Tokio task handles for running workers, used for cancellation via abort().
+    pub worker_handles: Arc<RwLock<HashMap<WorkerId, tokio::task::JoinHandle<()>>>>,
     /// Input senders for interactive workers, keyed by worker ID.
     /// Used by the route tool to deliver follow-up messages.
     pub worker_inputs: Arc<RwLock<HashMap<WorkerId, tokio::sync::mpsc::Sender<String>>>>,
@@ -40,6 +42,38 @@ pub struct ChannelState {
     pub channel_store: ChannelStore,
     pub screenshot_dir: std::path::PathBuf,
     pub logs_dir: std::path::PathBuf,
+}
+
+impl ChannelState {
+    /// Cancel a running worker by aborting its tokio task and cleaning up state.
+    /// Returns an error message if the worker is not found.
+    pub async fn cancel_worker(&self, worker_id: WorkerId) -> std::result::Result<(), String> {
+        let handle = self.worker_handles.write().await.remove(&worker_id);
+        let removed = self.active_workers.write().await.remove(&worker_id).is_some();
+        self.worker_inputs.write().await.remove(&worker_id);
+
+        if let Some(handle) = handle {
+            handle.abort();
+            Ok(())
+        } else if removed {
+            // Worker was in active_workers but had no handle (shouldn't happen, but handle gracefully)
+            Ok(())
+        } else {
+            Err(format!("Worker {worker_id} not found"))
+        }
+    }
+
+    /// Cancel a running branch by aborting its tokio task.
+    /// Returns an error message if the branch is not found.
+    pub async fn cancel_branch(&self, branch_id: BranchId) -> std::result::Result<(), String> {
+        let handle = self.active_branches.write().await.remove(&branch_id);
+        if let Some(handle) = handle {
+            handle.abort();
+            Ok(())
+        } else {
+            Err(format!("Branch {branch_id} not found"))
+        }
+    }
 }
 
 impl std::fmt::Debug for ChannelState {
@@ -120,6 +154,7 @@ impl Channel {
             history: history.clone(),
             active_branches: active_branches.clone(),
             active_workers: active_workers.clone(),
+            worker_handles: Arc::new(RwLock::new(HashMap::new())),
             worker_inputs: Arc::new(RwLock::new(HashMap::new())),
             status_block: status_block.clone(),
             deps: deps.clone(),
@@ -800,7 +835,7 @@ impl Channel {
                 workers.remove(worker_id);
                 drop(workers);
 
-                // Clean up the input sender for interactive workers
+                self.state.worker_handles.write().await.remove(worker_id);
                 self.state.worker_inputs.write().await.remove(worker_id);
 
                 if *notify {
@@ -998,6 +1033,19 @@ async fn spawn_branch(
     Ok(branch_id)
 }
 
+/// Check whether the channel has capacity for another worker.
+async fn check_worker_limit(state: &ChannelState) -> std::result::Result<(), AgentError> {
+    let max_workers = **state.deps.runtime_config.max_concurrent_workers.load();
+    let workers = state.active_workers.read().await;
+    if workers.len() >= max_workers {
+        return Err(AgentError::WorkerLimitReached {
+            channel_id: state.channel_id.to_string(),
+            max: max_workers,
+        });
+    }
+    Ok(())
+}
+
 /// Spawn a worker from a ChannelState. Used by the SpawnWorkerTool.
 pub async fn spawn_worker_from_state(
     state: &ChannelState,
@@ -1005,6 +1053,7 @@ pub async fn spawn_worker_from_state(
     interactive: bool,
     skill_name: Option<&str>,
 ) -> std::result::Result<WorkerId, AgentError> {
+    check_worker_limit(state).await?;
     let task = task.into();
 
     let rc = &state.deps.runtime_config;
@@ -1060,13 +1109,15 @@ pub async fn spawn_worker_from_state(
     
     let worker_id = worker.id;
 
-    spawn_worker_task(
+    let handle = spawn_worker_task(
         worker_id,
         state.deps.event_tx.clone(),
         state.deps.agent_id.clone(),
         Some(state.channel_id.clone()),
         worker.run(),
     );
+
+    state.worker_handles.write().await.insert(worker_id, handle);
 
     {
         let mut status = state.status_block.write().await;
@@ -1096,6 +1147,7 @@ pub async fn spawn_opencode_worker_from_state(
     directory: &str,
     interactive: bool,
 ) -> std::result::Result<crate::WorkerId, AgentError> {
+    check_worker_limit(state).await?;
     let task = task.into();
     let directory = std::path::PathBuf::from(directory);
 
@@ -1135,7 +1187,7 @@ pub async fn spawn_opencode_worker_from_state(
 
     let worker_id = worker.id;
 
-    spawn_worker_task(
+    let handle = spawn_worker_task(
         worker_id,
         state.deps.event_tx.clone(),
         state.deps.agent_id.clone(),
@@ -1145,6 +1197,8 @@ pub async fn spawn_opencode_worker_from_state(
             Ok::<String, anyhow::Error>(result.result_text)
         },
     );
+
+    state.worker_handles.write().await.insert(worker_id, handle);
 
     let opencode_task = format!("[opencode] {task}");
     {
@@ -1168,13 +1222,15 @@ pub async fn spawn_opencode_worker_from_state(
 ///
 /// Handles both success and error cases, logging failures and sending the
 /// appropriate event. Used by both builtin workers and OpenCode workers.
+/// Returns the JoinHandle so the caller can store it for cancellation.
 fn spawn_worker_task<F, E>(
     worker_id: WorkerId,
     event_tx: broadcast::Sender<ProcessEvent>,
     agent_id: crate::AgentId,
     channel_id: Option<ChannelId>,
     future: F,
-) where
+) -> tokio::task::JoinHandle<()>
+where
     F: std::future::Future<Output = std::result::Result<String, E>> + Send + 'static,
     E: std::fmt::Display + Send + 'static,
 {
@@ -1193,7 +1249,7 @@ fn spawn_worker_task<F, E>(
             result: result_text,
             notify,
         });
-    });
+    })
 }
 
 /// Format a user message with sender attribution from message metadata.

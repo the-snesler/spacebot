@@ -196,6 +196,7 @@ export interface AgentInfo {
 	context_window: number;
 	max_turns: number;
 	max_concurrent_branches: number;
+	max_concurrent_workers: number;
 }
 
 export interface AgentsResponse {
@@ -387,6 +388,7 @@ export interface RoutingSection {
 
 export interface TuningSection {
 	max_concurrent_branches: number;
+	max_concurrent_workers: number;
 	max_turns: number;
 	branch_max_turns: number;
 	context_window: number;
@@ -456,6 +458,7 @@ export interface RoutingUpdate {
 
 export interface TuningUpdate {
 	max_concurrent_branches?: number;
+	max_concurrent_workers?: number;
 	max_turns?: number;
 	branch_max_turns?: number;
 	context_window?: number;
@@ -695,6 +698,18 @@ export const api = {
 			throw new Error(`API error: ${response.status}`);
 		}
 		return response.json() as Promise<CronActionResponse>;
+	},
+
+	cancelProcess: async (channelId: string, processType: "worker" | "branch", processId: string) => {
+		const response = await fetch(`${API_BASE}/channels/cancel`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ channel_id: channelId, process_type: processType, process_id: processId }),
+		});
+		if (!response.ok) {
+			throw new Error(`API error: ${response.status}`);
+		}
+		return response.json() as Promise<{ success: boolean; message: string }>;
 	},
 
 	eventsUrl: `${API_BASE}/events`,
