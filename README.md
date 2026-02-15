@@ -33,6 +33,10 @@
 
 > **One-click deploy with [spacebot.sh](https://spacebot.sh)** — connect your Discord, Slack, or Telegram, configure your agent, and go. No self-hosting required.
 
+<p align="center">
+  <img src=".github/spacebot-ui.jpg" alt="Spacebot UI" />
+</p>
+
 ---
 
 ## The Problem
@@ -247,13 +251,13 @@ Channel context hits 80%
 
 ### What Each Process Gets
 
-| Process   | Type         | Tools                                     | Context                             |
-| --------- | ------------ | ----------------------------------------- | ----------------------------------- |
-| Channel   | LLM          | Reply, branch, spawn workers, route       | Conversation + compaction summaries |
-| Branch    | LLM          | Memory recall, memory save, spawn workers | Fork of channel's context           |
-| Worker    | Pluggable    | Shell, file, exec, browser (configurable) | Fresh prompt + task description     |
-| Compactor | Programmatic | Monitor context, trigger workers          | N/A                                 |
-| Cortex    | LLM + Programmatic | Memory, consolidation, system monitor | Entire agent scope              |
+| Process   | Type               | Tools                                     | Context                             |
+| --------- | ------------------ | ----------------------------------------- | ----------------------------------- |
+| Channel   | LLM                | Reply, branch, spawn workers, route       | Conversation + compaction summaries |
+| Branch    | LLM                | Memory recall, memory save, spawn workers | Fork of channel's context           |
+| Worker    | Pluggable          | Shell, file, exec, browser (configurable) | Fresh prompt + task description     |
+| Compactor | Programmatic       | Monitor context, trigger workers          | N/A                                 |
+| Cortex    | LLM + Programmatic | Memory, consolidation, system monitor     | Entire agent scope                  |
 
 ### Memory System
 
