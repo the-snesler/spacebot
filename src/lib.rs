@@ -18,6 +18,7 @@ pub mod prompts;
 pub mod secrets;
 pub mod settings;
 pub mod skills;
+pub mod tasks;
 #[cfg(feature = "metrics")]
 pub mod telemetry;
 pub mod tools;
@@ -175,6 +176,7 @@ pub struct AgentDeps {
     pub agent_id: AgentId,
     pub memory_search: Arc<memory::MemorySearch>,
     pub llm_manager: Arc<llm::LlmManager>,
+    pub task_store: Arc<tasks::TaskStore>,
     pub cron_tool: Option<tools::CronTool>,
     pub runtime_config: Arc<config::RuntimeConfig>,
     pub event_tx: tokio::sync::broadcast::Sender<ProcessEvent>,

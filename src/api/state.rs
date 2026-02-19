@@ -10,6 +10,7 @@ use crate::memory::{EmbeddingModel, MemorySearch};
 use crate::messaging::MessagingManager;
 use crate::messaging::webchat::WebChatAdapter;
 use crate::prompts::PromptEngine;
+use crate::tasks::TaskStore;
 use crate::update::SharedUpdateStatus;
 use crate::{ProcessEvent, ProcessId};
 
@@ -59,6 +60,8 @@ pub struct ApiState {
     pub cron_stores: arc_swap::ArcSwap<HashMap<String, Arc<CronStore>>>,
     /// Per-agent cron schedulers for job timer management.
     pub cron_schedulers: arc_swap::ArcSwap<HashMap<String, Arc<Scheduler>>>,
+    /// Per-agent task stores for task CRUD operations.
+    pub task_stores: arc_swap::ArcSwap<HashMap<String, Arc<TaskStore>>>,
     /// Per-agent RuntimeConfig for reading live hot-reloaded configuration.
     pub runtime_configs: ArcSwap<HashMap<String, Arc<RuntimeConfig>>>,
     /// Shared reference to the Discord permissions ArcSwap (same instance used by the adapter and file watcher).
@@ -189,6 +192,7 @@ impl ApiState {
             config_path: RwLock::new(PathBuf::new()),
             cron_stores: arc_swap::ArcSwap::from_pointee(HashMap::new()),
             cron_schedulers: arc_swap::ArcSwap::from_pointee(HashMap::new()),
+            task_stores: arc_swap::ArcSwap::from_pointee(HashMap::new()),
             runtime_configs: ArcSwap::from_pointee(HashMap::new()),
             discord_permissions: RwLock::new(None),
             slack_permissions: RwLock::new(None),
@@ -362,6 +366,11 @@ impl ApiState {
     /// Set the cron schedulers for all agents.
     pub fn set_cron_schedulers(&self, schedulers: HashMap<String, Arc<Scheduler>>) {
         self.cron_schedulers.store(Arc::new(schedulers));
+    }
+
+    /// Set the task stores for all agents.
+    pub fn set_task_stores(&self, stores: HashMap<String, Arc<TaskStore>>) {
+        self.task_stores.store(Arc::new(stores));
     }
 
     /// Set the runtime configs for all agents.

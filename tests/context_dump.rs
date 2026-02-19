@@ -52,6 +52,7 @@ async fn bootstrap_deps() -> anyhow::Result<(spacebot::AgentDeps, spacebot::conf
         embedding_table,
         embedding_model,
     ));
+    let task_store = Arc::new(spacebot::tasks::TaskStore::new(db.sqlite.clone()));
 
     let identity = spacebot::identity::Identity::load(&agent_config.workspace).await;
     let prompts = spacebot::prompts::PromptEngine::new("en")
@@ -74,6 +75,7 @@ async fn bootstrap_deps() -> anyhow::Result<(spacebot::AgentDeps, spacebot::conf
         agent_id,
         memory_search,
         llm_manager,
+        task_store,
         cron_tool: None,
         runtime_config,
         event_tx,
@@ -176,10 +178,12 @@ async fn dump_channel_context() {
         history: Arc::new(tokio::sync::RwLock::new(Vec::new())),
         active_branches: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
         active_workers: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
+        worker_handles: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
         worker_inputs: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
         status_block,
         deps: deps.clone(),
         conversation_logger,
+        process_run_logger: spacebot::conversation::history::ProcessRunLogger::new(deps.sqlite_pool.clone()),
         channel_store,
         screenshot_dir: std::path::PathBuf::from("/tmp/screenshots"),
         logs_dir: std::path::PathBuf::from("/tmp/logs"),
@@ -242,6 +246,9 @@ async fn dump_branch_context() {
     let conversation_logger = spacebot::conversation::ConversationLogger::new(deps.sqlite_pool.clone());
     let channel_store = spacebot::conversation::ChannelStore::new(deps.sqlite_pool.clone());
     let branch_tool_server = spacebot::tools::create_branch_tool_server(
+        None,
+        deps.agent_id.clone(),
+        deps.task_store.clone(),
         deps.memory_search.clone(),
         conversation_logger,
         channel_store,
@@ -296,10 +303,13 @@ async fn dump_worker_context() {
         deps.agent_id.clone(),
         worker_id,
         None,
+        deps.task_store.clone(),
         deps.event_tx.clone(),
         browser_config,
         std::path::PathBuf::from("/tmp/screenshots"),
         brave_search_key,
+        rc.workspace_dir.clone(),
+        rc.instance_dir.clone(),
     );
 
     let tool_defs = worker_tool_server
@@ -341,7 +351,8 @@ async fn dump_all_contexts() {
     let workspace_dir = rc.workspace_dir.to_string_lossy();
 
     // Generate bulletin so channel context is complete
-    let bulletin_success = spacebot::agent::cortex::generate_bulletin(&deps).await;
+    let cortex_logger = spacebot::agent::cortex::CortexLogger::new(deps.sqlite_pool.clone());
+    let bulletin_success = spacebot::agent::cortex::generate_bulletin(&deps, &cortex_logger).await;
     if bulletin_success {
         let bulletin = rc.memory_bulletin.load();
         println!("Bulletin generated: {} words", bulletin.split_whitespace().count());
@@ -362,10 +373,12 @@ async fn dump_all_contexts() {
         history: Arc::new(tokio::sync::RwLock::new(Vec::new())),
         active_branches: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
         active_workers: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
+        worker_handles: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
         worker_inputs: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
         status_block: Arc::new(tokio::sync::RwLock::new(spacebot::agent::status::StatusBlock::new())),
         deps: deps.clone(),
         conversation_logger: conversation_logger.clone(),
+        process_run_logger: spacebot::conversation::history::ProcessRunLogger::new(deps.sqlite_pool.clone()),
         channel_store: channel_store.clone(),
         screenshot_dir: std::path::PathBuf::from("/tmp/screenshots"),
         logs_dir: std::path::PathBuf::from("/tmp/logs"),
@@ -390,6 +403,9 @@ async fn dump_all_contexts() {
         .render_branch_prompt(&instance_dir, &workspace_dir)
         .expect("failed to render branch prompt");
     let branch_tool_server = spacebot::tools::create_branch_tool_server(
+        None,
+        deps.agent_id.clone(),
+        deps.task_store.clone(),
         deps.memory_search.clone(),
         conversation_logger,
         channel_store,
@@ -414,10 +430,13 @@ async fn dump_all_contexts() {
         deps.agent_id.clone(),
         uuid::Uuid::new_v4(),
         None,
+        deps.task_store.clone(),
         deps.event_tx.clone(),
         browser_config,
         std::path::PathBuf::from("/tmp/screenshots"),
         brave_search_key,
+        rc.workspace_dir.clone(),
+        rc.instance_dir.clone(),
     );
     let worker_tool_defs = worker_tool_server.get_tool_defs(None).await.unwrap();
     let worker_tools_text = format_tool_defs(&worker_tool_defs);

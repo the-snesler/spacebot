@@ -20,6 +20,7 @@ mod settings;
 mod skills;
 mod state;
 mod system;
+mod tasks;
 mod webchat;
 
 pub use server::start_http_server;

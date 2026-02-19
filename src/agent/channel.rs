@@ -1069,6 +1069,9 @@ async fn spawn_branch(
     };
 
     let tool_server = crate::tools::create_branch_tool_server(
+        Some(state.clone()),
+        state.deps.agent_id.clone(),
+        state.deps.task_store.clone(),
         state.deps.memory_search.clone(),
         state.conversation_logger.clone(),
         state.channel_store.clone(),

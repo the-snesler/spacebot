@@ -52,6 +52,7 @@ async fn bootstrap_deps() -> anyhow::Result<spacebot::AgentDeps> {
         embedding_table,
         embedding_model,
     ));
+    let task_store = Arc::new(spacebot::tasks::TaskStore::new(db.sqlite.clone()));
 
     let identity = spacebot::identity::Identity::load(&agent_config.workspace).await;
     let prompts = spacebot::prompts::PromptEngine::new("en")
@@ -74,6 +75,7 @@ async fn bootstrap_deps() -> anyhow::Result<spacebot::AgentDeps> {
         agent_id,
         memory_search,
         llm_manager,
+        task_store,
         cron_tool: None,
         runtime_config,
         event_tx,
@@ -141,7 +143,8 @@ async fn test_bulletin_generation() {
     assert!(before.is_empty(), "bulletin should start empty");
 
     // Generate the bulletin
-    let success = spacebot::agent::cortex::generate_bulletin(&deps).await;
+    let logger = spacebot::agent::cortex::CortexLogger::new(deps.sqlite_pool.clone());
+    let success = spacebot::agent::cortex::generate_bulletin(&deps, &logger).await;
     assert!(success, "bulletin generation should succeed");
 
     // Verify the bulletin was stored

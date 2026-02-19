@@ -260,6 +260,7 @@ pub(super) async fn create_agent(
         embedding_table,
         embedding_model,
     ));
+    let task_store = std::sync::Arc::new(crate::tasks::TaskStore::new(db.sqlite.clone()));
 
     let (event_tx, _) = tokio::sync::broadcast::channel(256);
     let arc_agent_id: crate::AgentId = std::sync::Arc::from(agent_id.as_str());
@@ -315,6 +316,7 @@ pub(super) async fn create_agent(
         agent_id: arc_agent_id.clone(),
         memory_search: memory_search.clone(),
         llm_manager,
+        task_store: task_store.clone(),
         cron_tool: None,
         runtime_config: runtime_config.clone(),
         event_tx: event_tx.clone(),
@@ -349,6 +351,8 @@ pub(super) async fn create_agent(
     let conversation_logger = crate::conversation::history::ConversationLogger::new(db.sqlite.clone());
     let channel_store = crate::conversation::ChannelStore::new(db.sqlite.clone());
     let cortex_tool_server = crate::tools::create_cortex_chat_tool_server(
+        deps.agent_id.clone(),
+        deps.task_store.clone(),
         memory_search.clone(),
         conversation_logger,
         channel_store,
@@ -366,19 +370,12 @@ pub(super) async fn create_agent(
     );
 
     let cortex_logger = crate::agent::cortex::CortexLogger::new(db.sqlite.clone());
-    tokio::spawn({
-        let deps = deps.clone();
-        let logger = cortex_logger.clone();
-        async move {
-            crate::agent::cortex::spawn_bulletin_loop(deps, logger).await;
-        }
-    });
-    tokio::spawn({
-        let deps = deps.clone();
-        async move {
-            crate::agent::cortex::spawn_association_loop(deps, cortex_logger).await;
-        }
-    });
+    crate::agent::cortex::spawn_bulletin_loop(deps.clone(), cortex_logger.clone());
+    crate::agent::cortex::spawn_association_loop(deps.clone(), cortex_logger);
+    crate::agent::cortex::spawn_ready_task_loop(
+        deps.clone(),
+        crate::agent::cortex::CortexLogger::new(db.sqlite.clone()),
+    );
 
     let ingestion_config = **runtime_config.ingestion.load();
     if ingestion_config.enabled {
@@ -409,6 +406,10 @@ pub(super) async fn create_agent(
         let mut searches = (**state.memory_searches.load()).clone();
         searches.insert(agent_id.clone(), memory_search);
         state.memory_searches.store(std::sync::Arc::new(searches));
+
+        let mut task_stores = (**state.task_stores.load()).clone();
+        task_stores.insert(agent_id.clone(), task_store);
+        state.task_stores.store(std::sync::Arc::new(task_stores));
 
         let mut workspaces = (**state.agent_workspaces.load()).clone();
         workspaces.insert(agent_id.clone(), agent_config.workspace.clone());

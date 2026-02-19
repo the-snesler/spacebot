@@ -1,7 +1,7 @@
 //! HTTP server setup: router, static file serving, and API route wiring.
 
 use super::state::ApiState;
-use super::{agents, bindings, channels, config, cortex, cron, ingest, memories, messaging, models, providers, settings, skills, system, webchat};
+use super::{agents, bindings, channels, config, cortex, cron, ingest, memories, messaging, models, providers, settings, skills, system, tasks, webchat};
 
 use axum::http::{header, StatusCode, Uri};
 use axum::response::{Html, IntoResponse, Response};
@@ -58,6 +58,10 @@ pub async fn start_http_server(
         .route("/agents/cron/executions", get(cron::cron_executions))
         .route("/agents/cron/trigger", post(cron::trigger_cron))
         .route("/agents/cron/toggle", put(cron::toggle_cron))
+        .route("/agents/tasks", get(tasks::list_tasks).post(tasks::create_task))
+        .route("/agents/tasks/{number}", get(tasks::get_task).put(tasks::update_task).delete(tasks::delete_task))
+        .route("/agents/tasks/{number}/approve", post(tasks::approve_task))
+        .route("/agents/tasks/{number}/execute", post(tasks::execute_task))
         .route("/channels/cancel", post(channels::cancel_process))
         .route("/agents/ingest/files", get(ingest::list_ingest_files).delete(ingest::delete_ingest_file))
         .route("/agents/ingest/upload", post(ingest::upload_ingest_file))

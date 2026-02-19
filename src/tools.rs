@@ -12,10 +12,13 @@
 //! - No memory tools — the channel delegates memory work to branches.
 //!
 //! **Branch ToolServer** (one per branch, isolated):
-//! - `memory_save` + `memory_recall` + `memory_delete` — registered at creation
+//! - `memory_save` + `memory_recall` + `memory_delete` + `channel_recall`
+//! - `task_create` + `task_list` + `task_update`
+//! - `spawn_worker` is included for channel-originated branches only
 //!
 //! **Worker ToolServer** (one per worker, created at spawn time):
 //! - `shell`, `file`, `exec` — stateless, registered at creation
+//! - `task_update` — scoped to the worker's assigned task
 //! - `set_status` — per-worker instance, registered at creation
 //!
 //! **Cortex ToolServer** (one per agent):
@@ -41,6 +44,9 @@ pub mod channel_recall;
 pub mod cron;
 pub mod send_file;
 pub mod send_message_to_another_channel;
+pub mod task_create;
+pub mod task_list;
+pub mod task_update;
 
 pub use reply::{ReplyTool, ReplyArgs, ReplyOutput, ReplyError};
 pub use branch_tool::{BranchTool, BranchArgs, BranchOutput, BranchError};
@@ -62,10 +68,14 @@ pub use channel_recall::{ChannelRecallTool, ChannelRecallArgs, ChannelRecallOutp
 pub use cron::{CronTool, CronArgs, CronOutput, CronError};
 pub use send_file::{SendFileTool, SendFileArgs, SendFileOutput, SendFileError};
 pub use send_message_to_another_channel::{SendMessageTool, SendMessageArgs, SendMessageOutput, SendMessageError};
+pub use task_create::{TaskCreateTool, TaskCreateArgs, TaskCreateOutput, TaskCreateError};
+pub use task_list::{TaskListTool, TaskListArgs, TaskListOutput, TaskListError};
+pub use task_update::{TaskUpdateTool, TaskUpdateArgs, TaskUpdateOutput, TaskUpdateError};
 
 use crate::agent::channel::ChannelState;
 use crate::config::BrowserConfig;
 use crate::memory::MemorySearch;
+use crate::tasks::TaskStore;
 use crate::{AgentId, ChannelId, OutboundResponse, ProcessEvent, WorkerId};
 use rig::tool::Tool as _;
 use rig::tool::server::{ToolServer, ToolServerHandle};
@@ -171,16 +181,27 @@ pub async fn remove_channel_tools(
 /// visible to the channel. Both `memory_save` and `memory_recall` are
 /// registered at creation.
 pub fn create_branch_tool_server(
+    state: Option<ChannelState>,
+    agent_id: AgentId,
+    task_store: Arc<TaskStore>,
     memory_search: Arc<MemorySearch>,
     conversation_logger: crate::conversation::history::ConversationLogger,
     channel_store: crate::conversation::ChannelStore,
 ) -> ToolServerHandle {
-    ToolServer::new()
+    let mut server = ToolServer::new()
         .tool(MemorySaveTool::new(memory_search.clone()))
         .tool(MemoryRecallTool::new(memory_search.clone()))
         .tool(MemoryDeleteTool::new(memory_search))
         .tool(ChannelRecallTool::new(conversation_logger, channel_store))
-        .run()
+        .tool(TaskCreateTool::new(task_store.clone(), agent_id.to_string(), "branch"))
+        .tool(TaskListTool::new(task_store.clone(), agent_id.to_string()))
+        .tool(TaskUpdateTool::for_branch(task_store, agent_id));
+
+    if let Some(state) = state {
+        server = server.tool(SpawnWorkerTool::new(state));
+    }
+
+    server.run()
 }
 
 /// Create a per-worker ToolServer with task-appropriate tools.
@@ -195,6 +216,7 @@ pub fn create_worker_tool_server(
     agent_id: AgentId,
     worker_id: WorkerId,
     channel_id: Option<ChannelId>,
+    task_store: Arc<TaskStore>,
     event_tx: broadcast::Sender<ProcessEvent>,
     browser_config: BrowserConfig,
     screenshot_dir: PathBuf,
@@ -206,6 +228,7 @@ pub fn create_worker_tool_server(
         .tool(ShellTool::new(instance_dir.clone(), workspace.clone()))
         .tool(FileTool::new(workspace.clone()))
         .tool(ExecTool::new(instance_dir, workspace))
+        .tool(TaskUpdateTool::for_worker(task_store, agent_id.clone(), worker_id))
         .tool(SetStatusTool::new(agent_id, worker_id, channel_id, event_tx));
 
     if browser_config.enabled {
@@ -235,6 +258,8 @@ pub fn create_cortex_tool_server(memory_search: Arc<MemorySearch>) -> ToolServer
 /// the interactive cortex full capabilities. Does not include channel-specific
 /// tools (reply, react, skip) since the cortex chat doesn't talk to platforms.
 pub fn create_cortex_chat_tool_server(
+    agent_id: AgentId,
+    task_store: Arc<TaskStore>,
     memory_search: Arc<MemorySearch>,
     conversation_logger: crate::conversation::history::ConversationLogger,
     channel_store: crate::conversation::ChannelStore,
@@ -249,6 +274,9 @@ pub fn create_cortex_chat_tool_server(
         .tool(MemoryRecallTool::new(memory_search.clone()))
         .tool(MemoryDeleteTool::new(memory_search))
         .tool(ChannelRecallTool::new(conversation_logger, channel_store))
+        .tool(TaskCreateTool::new(task_store.clone(), agent_id.to_string(), "cortex"))
+        .tool(TaskListTool::new(task_store.clone(), agent_id.to_string()))
+        .tool(TaskUpdateTool::for_branch(task_store, agent_id))
         .tool(ShellTool::new(instance_dir.clone(), workspace.clone()))
         .tool(FileTool::new(workspace.clone()))
         .tool(ExecTool::new(instance_dir, workspace));
