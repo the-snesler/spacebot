@@ -1,5 +1,6 @@
 use crate::error::Result;
 use anyhow::Context;
+use chrono::{Local, Utc};
 use minijinja::{Environment, Value, context};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -117,6 +118,10 @@ impl PromptEngine {
         env.add_template(
             "fragments/system/tool_syntax_correction",
             crate::prompts::text::get("fragments/system/tool_syntax_correction"),
+        )?;
+        env.add_template(
+            "fragments/system/runtime_context",
+            crate::prompts::text::get("fragments/system/runtime_context"),
         )?;
         env.add_template(
             "fragments/coalesce_hint",
@@ -271,6 +276,29 @@ impl PromptEngine {
                 remove_count => remove_count,
             },
         )
+    }
+
+    /// Render runtime context injected into system prompts.
+    pub fn render_runtime_context(&self, model_name: &str) -> Result<String> {
+        let now_utc = Utc::now();
+        let now_local = Local::now();
+
+        self.render(
+            "fragments/system/runtime_context",
+            context! {
+                model_name => model_name,
+                now_utc => now_utc.to_rfc3339(),
+                now_local => now_local.to_rfc3339(),
+                local_timezone => now_local.format("%Z").to_string(),
+                local_utc_offset => now_local.format("%:z").to_string(),
+            },
+        )
+    }
+
+    /// Prefix a system prompt with runtime context.
+    pub fn inject_runtime_context(&self, system_prompt: &str, model_name: &str) -> Result<String> {
+        let runtime_context = self.render_runtime_context(model_name)?;
+        Ok(format!("{runtime_context}\n\n{system_prompt}"))
     }
 
     /// Convenience method for rendering worker overflow recovery message.

@@ -210,9 +210,13 @@ impl Worker {
         let model_name = routing.resolve(ProcessType::Worker, None).to_string();
         let model = SpacebotModel::make(&self.deps.llm_manager, &model_name)
             .with_routing((**routing).clone());
+        let prompt_engine = self.deps.runtime_config.prompts.load();
+        let preamble = prompt_engine
+            .inject_runtime_context(&self.system_prompt, &model_name)
+            .expect("failed to inject runtime context into worker prompt");
 
         let agent = AgentBuilder::new(model)
-            .preamble(&self.system_prompt)
+            .preamble(&preamble)
             .default_max_turns(TURNS_PER_SEGMENT)
             .tool_server_handle(worker_tool_server)
             .build();

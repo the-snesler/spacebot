@@ -461,12 +461,17 @@ pub async fn generate_bulletin(deps: &AgentDeps, logger: &CortexLogger) -> bool 
         .expect("failed to render cortex bulletin prompt");
 
     let routing = deps.runtime_config.routing.load();
-    let model_name = routing.resolve(ProcessType::Branch, None).to_string();
+    let model_name = routing.resolve(ProcessType::Cortex, None).to_string();
     let model =
         SpacebotModel::make(&deps.llm_manager, &model_name).with_routing((**routing).clone());
+    let bulletin_preamble = prompt_engine
+        .inject_runtime_context(&bulletin_prompt, &model_name)
+        .expect("failed to inject runtime context into cortex bulletin prompt");
 
     // No tools needed — the LLM just synthesizes the pre-gathered data
-    let agent = AgentBuilder::new(model).preamble(&bulletin_prompt).build();
+    let agent = AgentBuilder::new(model)
+        .preamble(&bulletin_preamble)
+        .build();
 
     let synthesis_prompt = prompt_engine
         .render_system_cortex_synthesis(cortex_config.bulletin_max_words, &raw_sections)
@@ -616,11 +621,14 @@ async fn generate_profile(deps: &AgentDeps, logger: &CortexLogger) {
     };
 
     let routing = deps.runtime_config.routing.load();
-    let model_name = routing.resolve(ProcessType::Branch, None).to_string();
+    let model_name = routing.resolve(ProcessType::Cortex, None).to_string();
     let model =
         SpacebotModel::make(&deps.llm_manager, &model_name).with_routing((**routing).clone());
+    let profile_preamble = prompt_engine
+        .inject_runtime_context(&profile_prompt, &model_name)
+        .expect("failed to inject runtime context into cortex profile prompt");
 
-    let agent = AgentBuilder::new(model).preamble(&profile_prompt).build();
+    let agent = AgentBuilder::new(model).preamble(&profile_preamble).build();
 
     match agent.prompt(&synthesis_prompt).await {
         Ok(response) => {

@@ -261,12 +261,16 @@ impl CortexChatSession {
 
         // Resolve model and build agent
         let routing = self.deps.runtime_config.routing.load();
-        let model_name = routing.resolve(ProcessType::Branch, None).to_string();
+        let model_name = routing.resolve(ProcessType::Cortex, None).to_string();
         let model = SpacebotModel::make(&self.deps.llm_manager, &model_name)
             .with_routing((**routing).clone());
+        let prompt_engine = self.deps.runtime_config.prompts.load();
+        let preamble = prompt_engine
+            .inject_runtime_context(&system_prompt, &model_name)
+            .expect("failed to inject runtime context into cortex chat prompt");
 
         let agent = AgentBuilder::new(model)
-            .preamble(&system_prompt)
+            .preamble(&preamble)
             .default_max_turns(50)
             .tool_server_handle(self.tool_server.clone())
             .build();

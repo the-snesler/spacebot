@@ -92,9 +92,13 @@ impl Branch {
         let model_name = routing.resolve(ProcessType::Branch, None).to_string();
         let model = SpacebotModel::make(&self.deps.llm_manager, &model_name)
             .with_routing((**routing).clone());
+        let prompt_engine = self.deps.runtime_config.prompts.load();
+        let preamble = prompt_engine
+            .inject_runtime_context(&self.system_prompt, &model_name)
+            .expect("failed to inject runtime context into branch prompt");
 
         let agent = AgentBuilder::new(model)
-            .preamble(&self.system_prompt)
+            .preamble(&preamble)
             .default_max_turns(self.max_turns)
             .tool_server_handle(self.tool_server.clone())
             .build();

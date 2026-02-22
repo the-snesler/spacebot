@@ -868,14 +868,18 @@ impl Channel {
         }
 
         let rc = &self.deps.runtime_config;
+        let prompt_engine = rc.prompts.load();
         let routing = rc.routing.load();
         let max_turns = **rc.max_turns.load();
         let model_name = routing.resolve(ProcessType::Channel, None);
         let model = SpacebotModel::make(&self.deps.llm_manager, model_name)
             .with_routing((**routing).clone());
+        let preamble = prompt_engine
+            .inject_runtime_context(system_prompt, model_name)
+            .expect("failed to inject runtime context into channel prompt");
 
         let agent = AgentBuilder::new(model)
-            .preamble(system_prompt)
+            .preamble(&preamble)
             .default_max_turns(max_turns)
             .tool_server_handle(self.tool_server.clone())
             .build();
