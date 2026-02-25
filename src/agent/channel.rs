@@ -2193,6 +2193,148 @@ pub async fn spawn_opencode_worker_from_state(
     Ok(worker_id)
 }
 
+/// Spawn an ACP-backed worker for coding tasks.
+pub async fn spawn_acp_worker_from_state(
+    state: &ChannelState,
+    task: impl Into<String>,
+    directory: &str,
+    acp_id: Option<&str>,
+    interactive: bool,
+) -> std::result::Result<crate::WorkerId, AgentError> {
+    check_worker_limit(state).await?;
+    ensure_dispatch_readiness(state, "acp_worker");
+    let task = task.into();
+    let directory = std::path::PathBuf::from(directory);
+
+    let acp_configs = state.deps.runtime_config.acp.load();
+    let selected = if let Some(id) = acp_id {
+        acp_configs
+            .get(id)
+            .cloned()
+            .ok_or_else(|| AgentError::Other(anyhow::anyhow!("unknown ACP worker id '{}': configure defaults.acp.{}", id, id)))?
+    } else {
+        let enabled = acp_configs
+            .values()
+            .filter(|cfg| cfg.enabled && !cfg.command.trim().is_empty())
+            .cloned()
+            .collect::<Vec<_>>();
+
+        match enabled.len() {
+            0 => {
+                return Err(AgentError::Other(anyhow::anyhow!(
+                    "no enabled ACP workers configured; add [defaults.acp.<id>] in config.toml"
+                )));
+            }
+            1 => enabled[0].clone(),
+            _ => {
+                return Err(AgentError::Other(anyhow::anyhow!(
+                    "multiple ACP workers configured; provide acp_id when worker_type is 'acp'"
+                )));
+            }
+        }
+    };
+
+    if !selected.enabled {
+        return Err(AgentError::Other(anyhow::anyhow!(
+            "ACP worker '{}' is disabled",
+            selected.id
+        )));
+    }
+
+    if selected.command.trim().is_empty() {
+        return Err(AgentError::Other(anyhow::anyhow!(
+            "ACP worker '{}' command is empty",
+            selected.id
+        )));
+    }
+
+    let acp_label = selected.id.clone();
+    let worker = if interactive {
+        let (worker, input_tx) = crate::acp::AcpWorker::new_interactive(
+            Some(state.channel_id.clone()),
+            state.deps.agent_id.clone(),
+            &task,
+            directory,
+            selected,
+            state.deps.event_tx.clone(),
+        );
+        let worker_id = worker.id;
+        state
+            .worker_inputs
+            .write()
+            .await
+            .insert(worker_id, input_tx);
+        worker
+    } else {
+        crate::acp::AcpWorker::new(
+            Some(state.channel_id.clone()),
+            state.deps.agent_id.clone(),
+            &task,
+            directory,
+            selected,
+            state.deps.event_tx.clone(),
+        )
+    };
+
+    let worker_id = worker.id;
+
+    let worker_span = tracing::info_span!(
+        "worker.run",
+        worker_id = %worker_id,
+        channel_id = %state.channel_id,
+        task = %task,
+        worker_type = "acp",
+        acp_id = %acp_label,
+    );
+    let handle = spawn_worker_task(
+        worker_id,
+        state.deps.event_tx.clone(),
+        state.deps.agent_id.clone(),
+        Some(state.channel_id.clone()),
+        async move {
+            let result = tokio::task::spawn_blocking(move || -> anyhow::Result<String> {
+                let runtime = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .map_err(|error| anyhow::anyhow!("failed to build ACP runtime: {error}"))?;
+
+                runtime.block_on(async move {
+                    let worker_result = worker.run().await?;
+                    Ok::<String, anyhow::Error>(worker_result.result_text)
+                })
+            })
+            .await
+            .map_err(|error| anyhow::anyhow!("ACP worker thread join error: {error}"))??;
+
+            Ok::<String, anyhow::Error>(result)
+        }
+        .instrument(worker_span),
+    );
+
+    state.worker_handles.write().await.insert(worker_id, handle);
+
+    let acp_task = format!("[acp:{}] {}", acp_label, task);
+    {
+        let mut status = state.status_block.write().await;
+        status.add_worker(worker_id, &acp_task, false);
+    }
+
+    state
+        .deps
+        .event_tx
+        .send(crate::ProcessEvent::WorkerStarted {
+            agent_id: state.deps.agent_id.clone(),
+            worker_id,
+            channel_id: Some(state.channel_id.clone()),
+            task: acp_task,
+        })
+        .ok();
+
+    tracing::info!(worker_id = %worker_id, task = %task, acp_id = %acp_label, "ACP worker spawned");
+
+    Ok(worker_id)
+}
+
 /// Spawn a future as a tokio task that sends a `WorkerComplete` event on completion.
 ///
 /// Handles both success and error cases, logging failures and sending the

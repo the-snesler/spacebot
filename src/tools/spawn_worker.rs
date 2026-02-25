@@ -2,7 +2,8 @@
 
 use crate::WorkerId;
 use crate::agent::channel::{
-    ChannelState, spawn_opencode_worker_from_state, spawn_worker_from_state,
+    ChannelState, spawn_acp_worker_from_state, spawn_opencode_worker_from_state,
+    spawn_worker_from_state,
 };
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
@@ -42,14 +43,16 @@ pub struct SpawnWorkerArgs {
     pub suggested_skills: Vec<String>,
     /// Worker type: "builtin" (default) runs a Rig agent loop with shell/file/exec
     /// tools. "opencode" spawns an OpenCode subprocess with full coding agent
-    /// capabilities. Use "opencode" for complex coding tasks that benefit from
-    /// codebase exploration and context management.
+    /// capabilities. "acp" spawns an Agent Client Protocol worker.
     #[serde(default)]
     pub worker_type: Option<String>,
     /// Working directory for the worker. Required for "opencode" workers.
     /// The OpenCode agent will operate in this directory.
     #[serde(default)]
     pub directory: Option<String>,
+    /// ACP worker id from [defaults.acp.<id>] when worker_type is "acp".
+    #[serde(default)]
+    pub acp_id: Option<String>,
 }
 
 /// Output from spawn worker tool.
@@ -77,6 +80,7 @@ impl Tool for SpawnWorkerTool {
         let browser_enabled = rc.browser_config.load().enabled;
         let web_search_enabled = rc.brave_search_key.load().is_some();
         let opencode_enabled = rc.opencode.load().enabled;
+        let acp_enabled = !rc.acp.load().is_empty();
 
         let mut tools_list = vec!["shell", "file", "exec"];
         if browser_enabled {
@@ -91,11 +95,17 @@ impl Tool for SpawnWorkerTool {
         } else {
             ""
         };
+        let acp_note = if acp_enabled {
+            " Set worker_type to \"acp\" with a directory path for ACP-based coding tasks. Optionally provide acp_id to select a specific ACP worker from defaults.acp."
+        } else {
+            ""
+        };
 
         let base_description = crate::prompts::text::get("tools/spawn_worker");
         let description = base_description
             .replace("{tools}", &tools_list.join(", "))
-            .replace("{opencode_note}", opencode_note);
+            .replace("{opencode_note}", opencode_note)
+            .replace("{acp_note}", acp_note);
 
         let mut properties = serde_json::json!({
             "task": {
@@ -114,23 +124,40 @@ impl Tool for SpawnWorkerTool {
             }
         });
 
-        if opencode_enabled && let Some(obj) = properties.as_object_mut() {
+        if (opencode_enabled || acp_enabled) && let Some(obj) = properties.as_object_mut() {
+            let worker_type_enum = if opencode_enabled && acp_enabled {
+                serde_json::json!(["builtin", "opencode", "acp"])
+            } else if opencode_enabled {
+                serde_json::json!(["builtin", "opencode"])
+            } else {
+                serde_json::json!(["builtin", "acp"])
+            };
             obj.insert(
                 "worker_type".to_string(),
                 serde_json::json!({
                     "type": "string",
-                    "enum": ["builtin", "opencode"],
+                    "enum": worker_type_enum,
                     "default": "builtin",
-                    "description": "\"builtin\" (default) runs a Rig agent loop. \"opencode\" spawns a full OpenCode coding agent — use for complex multi-file coding tasks."
+                    "description": "\"builtin\" (default) runs a Rig agent loop. \"opencode\" spawns a full OpenCode coding agent. \"acp\" spawns an ACP-backed coding agent."
                 }),
             );
             obj.insert(
                 "directory".to_string(),
                 serde_json::json!({
                     "type": "string",
-                    "description": "Working directory for the worker. Required when worker_type is \"opencode\". The OpenCode agent operates in this directory."
+                    "description": "Working directory for the worker. Required when worker_type is \"opencode\" or \"acp\"."
                 }),
             );
+
+            if acp_enabled {
+                obj.insert(
+                    "acp_id".to_string(),
+                    serde_json::json!({
+                        "type": "string",
+                        "description": "Optional ACP worker id from defaults.acp.<id>. Recommended when multiple ACP workers are configured."
+                    }),
+                );
+            }
         }
 
         ToolDefinition {
@@ -147,6 +174,7 @@ impl Tool for SpawnWorkerTool {
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
         let readiness = self.state.deps.runtime_config.work_readiness();
         let is_opencode = args.worker_type.as_deref() == Some("opencode");
+        let is_acp = args.worker_type.as_deref() == Some("acp");
 
         let worker_id = if is_opencode {
             let directory = args.directory.as_deref().ok_or_else(|| {
@@ -156,6 +184,21 @@ impl Tool for SpawnWorkerTool {
             spawn_opencode_worker_from_state(&self.state, &args.task, directory, args.interactive)
                 .await
                 .map_err(|e| SpawnWorkerError(format!("{e}")))?
+        } else if is_acp {
+            let directory = args
+                .directory
+                .as_deref()
+                .ok_or_else(|| SpawnWorkerError("directory is required for acp workers".into()))?;
+
+            spawn_acp_worker_from_state(
+                &self.state,
+                &args.task,
+                directory,
+                args.acp_id.as_deref(),
+                args.interactive,
+            )
+            .await
+            .map_err(|e| SpawnWorkerError(format!("{e}")))?
         } else {
             spawn_worker_from_state(
                 &self.state,
@@ -171,7 +214,13 @@ impl Tool for SpawnWorkerTool {
             .map_err(|e| SpawnWorkerError(format!("{e}")))?
         };
 
-        let worker_type_label = if is_opencode { "OpenCode" } else { "builtin" };
+        let worker_type_label = if is_opencode {
+            "OpenCode"
+        } else if is_acp {
+            "ACP"
+        } else {
+            "builtin"
+        };
         let message = if args.interactive {
             format!(
                 "Interactive {worker_type_label} worker {worker_id} spawned for: {}. Route follow-ups with route_to_worker.",
@@ -202,5 +251,45 @@ impl Tool for SpawnWorkerTool {
             interactive: args.interactive,
             message: format!("{message}{readiness_note}"),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SpawnWorkerArgs;
+
+    #[test]
+    fn deserialize_acp_worker_args() {
+        let value = serde_json::json!({
+            "task": "implement feature",
+            "worker_type": "acp",
+            "directory": "/tmp/project",
+            "acp_id": "claude",
+            "interactive": true,
+            "suggested_skills": ["rust", "testing"]
+        });
+
+        let args: SpawnWorkerArgs = serde_json::from_value(value).expect("valid args");
+        assert_eq!(args.task, "implement feature");
+        assert_eq!(args.worker_type.as_deref(), Some("acp"));
+        assert_eq!(args.directory.as_deref(), Some("/tmp/project"));
+        assert_eq!(args.acp_id.as_deref(), Some("claude"));
+        assert!(args.interactive);
+        assert_eq!(args.suggested_skills, vec!["rust", "testing"]);
+    }
+
+    #[test]
+    fn deserialize_defaults_for_worker_args() {
+        let value = serde_json::json!({
+            "task": "quick check"
+        });
+
+        let args: SpawnWorkerArgs = serde_json::from_value(value).expect("valid args");
+        assert_eq!(args.task, "quick check");
+        assert!(!args.interactive);
+        assert!(args.suggested_skills.is_empty());
+        assert!(args.worker_type.is_none());
+        assert!(args.directory.is_none());
+        assert!(args.acp_id.is_none());
     }
 }
