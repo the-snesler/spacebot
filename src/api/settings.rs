@@ -414,7 +414,9 @@ pub(super) async fn update_global_settings(
 
                 acp_table.insert(&id, toml_edit::Item::Table(toml_edit::Table::new()));
 
-                if let Some(agent_table) = acp_table.get_mut(&id).and_then(|item| item.as_table_mut()) {
+                if let Some(agent_table) =
+                    acp_table.get_mut(&id).and_then(|item| item.as_table_mut())
+                {
                     agent_table["enabled"] = toml_edit::value(config.enabled.unwrap_or(true));
                     agent_table["command"] = toml_edit::value(config.command.unwrap_or_default());
 

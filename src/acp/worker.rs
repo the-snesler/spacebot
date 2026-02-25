@@ -9,13 +9,12 @@ use crate::{AgentId, ChannelId, ProcessEvent, WorkerId};
 
 use agent_client_protocol::{Agent as _, ClientSideConnection};
 use agent_client_protocol::{
-    ClientCapabilities, ContentBlock, ContentChunk,
-    CreateTerminalRequest, CreateTerminalResponse, Error as AcpError, FileSystemCapability,
-    InitializeRequest, PermissionOptionKind, PromptRequest, PromptResponse, ProtocolVersion,
-    ReadTextFileRequest, ReadTextFileResponse, RequestPermissionRequest, RequestPermissionOutcome,
-    RequestPermissionResponse, SelectedPermissionOutcome, SessionNotification, SessionUpdate,
-    TerminalExitStatus, TerminalId, TerminalOutputRequest, TerminalOutputResponse, ToolCallStatus,
-    WaitForTerminalExitRequest,
+    ClientCapabilities, ContentBlock, ContentChunk, CreateTerminalRequest, CreateTerminalResponse,
+    Error as AcpError, FileSystemCapability, InitializeRequest, PermissionOptionKind,
+    PromptRequest, PromptResponse, ProtocolVersion, ReadTextFileRequest, ReadTextFileResponse,
+    RequestPermissionOutcome, RequestPermissionRequest, RequestPermissionResponse,
+    SelectedPermissionOutcome, SessionNotification, SessionUpdate, TerminalExitStatus, TerminalId,
+    TerminalOutputRequest, TerminalOutputResponse, ToolCallStatus, WaitForTerminalExitRequest,
     WaitForTerminalExitResponse, WriteTextFileRequest, WriteTextFileResponse,
 };
 use anyhow::Context as _;
@@ -124,7 +123,9 @@ impl AcpWorker {
             tokio::spawn(async move {
                 let mut reader = tokio::io::BufReader::new(stderr);
                 let mut buffer = Vec::new();
-                if let Err(error) = tokio::io::AsyncReadExt::read_to_end(&mut reader, &mut buffer).await {
+                if let Err(error) =
+                    tokio::io::AsyncReadExt::read_to_end(&mut reader, &mut buffer).await
+                {
                     tracing::debug!(worker_id = %worker_id, %error, "failed to read ACP stderr");
                     return;
                 }
@@ -169,11 +170,9 @@ impl AcpWorker {
                 let initialize = InitializeRequest::new(ProtocolVersion::LATEST)
                     .client_capabilities(
                         ClientCapabilities::new()
-                            .fs(
-                                FileSystemCapability::new()
-                                    .read_text_file(true)
-                                    .write_text_file(true),
-                            )
+                            .fs(FileSystemCapability::new()
+                                .read_text_file(true)
+                                .write_text_file(true))
                             .terminal(true),
                     );
 
@@ -200,17 +199,15 @@ impl AcpWorker {
                 self.send_status("running ACP task");
 
                 acp_client.reset_text().await;
-                let prompt_response = prompt_once(
-                    &connection,
-                    &session.session_id,
-                    &self.task,
-                    timeout,
-                )
-                .await?;
+                let prompt_response =
+                    prompt_once(&connection, &session.session_id, &self.task, timeout).await?;
 
                 let mut result_text = acp_client.take_text().await;
                 if result_text.trim().is_empty() {
-                    result_text = format!("ACP worker completed with stop reason: {:?}", prompt_response.stop_reason);
+                    result_text = format!(
+                        "ACP worker completed with stop reason: {:?}",
+                        prompt_response.stop_reason
+                    );
                 }
 
                 self.send_result(&result_text, true, true);
@@ -221,7 +218,8 @@ impl AcpWorker {
                         self.send_status("processing follow-up");
                         acp_client.reset_text().await;
                         let follow_up_response =
-                            prompt_once(&connection, &session.session_id, &message, timeout).await?;
+                            prompt_once(&connection, &session.session_id, &message, timeout)
+                                .await?;
                         let follow_up_text = acp_client.take_text().await;
                         if !follow_up_text.trim().is_empty() {
                             result_text = follow_up_text;
@@ -316,10 +314,13 @@ async fn prompt_once(
     timeout_seconds: u64,
 ) -> anyhow::Result<PromptResponse> {
     let request = PromptRequest::new(session_id.clone(), vec![ContentBlock::from(message)]);
-    tokio::time::timeout(std::time::Duration::from_secs(timeout_seconds), connection.prompt(request))
-        .await
-        .context("ACP prompt timed out")?
-        .context("ACP prompt failed")
+    tokio::time::timeout(
+        std::time::Duration::from_secs(timeout_seconds),
+        connection.prompt(request),
+    )
+    .await
+    .context("ACP prompt timed out")?
+    .context("ACP prompt failed")
 }
 
 struct TerminalEntry {
@@ -407,18 +408,22 @@ impl SpacebotAcpClient {
             .unwrap_or_else(|_| self.workspace_root.clone());
 
         let candidate = if path.exists() {
-            path.canonicalize()
-                .map_err(|error| AcpError::resource_not_found(Some(path.display().to_string())).data(error.to_string()))?
+            path.canonicalize().map_err(|error| {
+                AcpError::resource_not_found(Some(path.display().to_string()))
+                    .data(error.to_string())
+            })?
         } else {
             let parent = path
                 .parent()
                 .ok_or_else(|| AcpError::invalid_params().data("path has no parent"))?;
-            let canonical_parent = parent
-                .canonicalize()
-                .map_err(|error| AcpError::resource_not_found(Some(parent.display().to_string())).data(error.to_string()))?;
-            canonical_parent.join(path.file_name().ok_or_else(|| {
-                AcpError::invalid_params().data("path is missing file name")
-            })?)
+            let canonical_parent = parent.canonicalize().map_err(|error| {
+                AcpError::resource_not_found(Some(parent.display().to_string()))
+                    .data(error.to_string())
+            })?;
+            canonical_parent.join(
+                path.file_name()
+                    .ok_or_else(|| AcpError::invalid_params().data("path is missing file name"))?,
+            )
         };
 
         if !candidate.starts_with(&canonical_workspace) {
@@ -432,7 +437,10 @@ impl SpacebotAcpClient {
         Ok(candidate)
     }
 
-    async fn terminal_entry(&self, terminal_id: &TerminalId) -> agent_client_protocol::Result<Arc<TerminalEntry>> {
+    async fn terminal_entry(
+        &self,
+        terminal_id: &TerminalId,
+    ) -> agent_client_protocol::Result<Arc<TerminalEntry>> {
         self.terminals
             .lock()
             .await
@@ -495,25 +503,23 @@ impl agent_client_protocol::Client for SpacebotAcpClient {
                     text.push_str(&text_content.text);
                 }
             }
-            SessionUpdate::AgentThoughtChunk(ContentChunk { content, .. }) => {
-                if let ContentBlock::Text(text_content) = content {
-                    let mut buffer = self.thought_buffer.lock().await;
-                    buffer.push_str(&text_content.text);
-                }
+            SessionUpdate::AgentThoughtChunk(ContentChunk {
+                content: ContentBlock::Text(text_content),
+                ..
+            }) => {
+                let mut buffer = self.thought_buffer.lock().await;
+                buffer.push_str(&text_content.text);
             }
             SessionUpdate::ToolCall(tool_call) => {
                 self.flush_thoughts().await;
-                self.send_status(format!(
-                    "tool {}: {:?}",
-                    tool_call.title, tool_call.status
-                ));
+                self.send_status(format!("tool: {}", tool_call.title));
             }
             SessionUpdate::ToolCallUpdate(update) => {
                 self.flush_thoughts().await;
-                if let Some(status) = update.fields.status {
-                    if status == ToolCallStatus::Failed {
-                        self.send_status("tool failed");
-                    }
+                if let Some(status) = update.fields.status
+                    && status == ToolCallStatus::Failed
+                {
+                    self.send_status("tool failed");
                 }
             }
             SessionUpdate::Plan(_) => {
@@ -572,7 +578,11 @@ impl agent_client_protocol::Client for SpacebotAcpClient {
                     .collect::<Vec<_>>()
                     .join("\n")
             }
-            (None, Some(limit)) => content.lines().take(limit as usize).collect::<Vec<_>>().join("\n"),
+            (None, Some(limit)) => content
+                .lines()
+                .take(limit as usize)
+                .collect::<Vec<_>>()
+                .join("\n"),
             (None, None) => content,
         };
 
@@ -644,11 +654,10 @@ impl agent_client_protocol::Client for SpacebotAcpClient {
         let output_bytes = entry.output.lock().await.clone();
         let output = String::from_utf8_lossy(&output_bytes).to_string();
 
-        Ok(TerminalOutputResponse::new(
-            output,
-            entry.truncated.load(Ordering::Relaxed),
+        Ok(
+            TerminalOutputResponse::new(output, entry.truncated.load(Ordering::Relaxed))
+                .exit_status(exit_status.map(to_terminal_exit_status)),
         )
-        .exit_status(exit_status.map(to_terminal_exit_status)))
     }
 
     async fn release_terminal(

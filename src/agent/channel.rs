@@ -2285,10 +2285,13 @@ pub async fn spawn_acp_worker_from_state(
 
     let acp_configs = state.deps.runtime_config.acp.load();
     let selected = if let Some(id) = acp_id {
-        acp_configs
-            .get(id)
-            .cloned()
-            .ok_or_else(|| AgentError::Other(anyhow::anyhow!("unknown ACP worker id '{}': configure defaults.acp.{}", id, id)))?
+        acp_configs.get(id).cloned().ok_or_else(|| {
+            AgentError::Other(anyhow::anyhow!(
+                "unknown ACP worker id '{}': configure defaults.acp.{}",
+                id,
+                id
+            ))
+        })?
     } else {
         let enabled = acp_configs
             .values()

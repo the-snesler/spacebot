@@ -124,7 +124,9 @@ impl Tool for SpawnWorkerTool {
             }
         });
 
-        if (opencode_enabled || acp_enabled) && let Some(obj) = properties.as_object_mut() {
+        if (opencode_enabled || acp_enabled)
+            && let Some(obj) = properties.as_object_mut()
+        {
             let worker_type_enum = if opencode_enabled && acp_enabled {
                 serde_json::json!(["builtin", "opencode", "acp"])
             } else if opencode_enabled {

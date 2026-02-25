@@ -1,7 +1,7 @@
 //! Spacebot: A Rust agentic system where every LLM process has a dedicated role.
 
-pub mod agent;
 pub mod acp;
+pub mod agent;
 pub mod api;
 pub mod auth;
 pub mod config;
