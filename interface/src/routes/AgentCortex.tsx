@@ -34,16 +34,42 @@ const EVENT_CATEGORY_COLORS: Record<string, string> = {
 /** Groups for the filter pills — reduces clutter vs showing all 13 types. */
 const FILTER_GROUPS: { label: string; types: CortexEventType[] }[] = [
 	{ label: "Bulletin", types: ["bulletin_generated", "bulletin_failed"] },
-	{ label: "Maintenance", types: ["maintenance_run", "memory_merged", "memory_decayed", "memory_pruned"] },
-	{ label: "Health", types: ["worker_killed", "branch_killed", "circuit_breaker_tripped", "health_check"] },
-	{ label: "Consolidation", types: ["association_created", "contradiction_flagged", "observation_created"] },
+	{
+		label: "Maintenance",
+		types: [
+			"maintenance_run",
+			"memory_merged",
+			"memory_decayed",
+			"memory_pruned",
+		],
+	},
+	{
+		label: "Health",
+		types: [
+			"worker_killed",
+			"branch_killed",
+			"circuit_breaker_tripped",
+			"health_check",
+		],
+	},
+	{
+		label: "Consolidation",
+		types: [
+			"association_created",
+			"contradiction_flagged",
+			"observation_created",
+		],
+	},
 ];
 
 function EventTypeBadge({ eventType }: { eventType: string }) {
-	const color = EVENT_CATEGORY_COLORS[eventType] ?? "bg-app-darkBox text-ink-faint";
+	const color =
+		EVENT_CATEGORY_COLORS[eventType] ?? "bg-app-darkBox text-ink-faint";
 	const label = eventType.replace(/_/g, " ");
 	return (
-		<span className={`inline-flex items-center rounded px-1.5 py-0.5 text-tiny font-medium ${color}`}>
+		<span
+			className={`inline-flex items-center rounded px-1.5 py-0.5 text-tiny font-medium ${color}`}
+		>
 			{label}
 		</span>
 	);
@@ -78,7 +104,7 @@ export function AgentCortex({ agentId }: AgentCortexProps) {
 	// Determine actual event_type filter from group or individual selection
 	// For groups, we pass no event_type and filter client-side (API only supports single type)
 	const activeGroupTypes = groupFilter
-		? FILTER_GROUPS.find((g) => g.label === groupFilter)?.types ?? []
+		? (FILTER_GROUPS.find((g) => g.label === groupFilter)?.types ?? [])
 		: [];
 	const isGroupFiltering = activeGroupTypes.length > 0;
 
@@ -98,7 +124,9 @@ export function AgentCortex({ agentId }: AgentCortexProps) {
 	let total = data?.total ?? 0;
 
 	if (isGroupFiltering) {
-		events = events.filter((event) => activeGroupTypes.includes(event.event_type));
+		events = events.filter((event) =>
+			activeGroupTypes.includes(event.event_type),
+		);
 		total = events.length;
 		events = events.slice(offset, offset + PAGE_SIZE);
 	}
@@ -106,7 +134,10 @@ export function AgentCortex({ agentId }: AgentCortexProps) {
 	const hasNext = offset + PAGE_SIZE < total;
 	const hasPrev = offset > 0;
 
-	const handleFilterChange = (group: string | null, type_: CortexEventType | null) => {
+	const handleFilterChange = (
+		group: string | null,
+		type_: CortexEventType | null,
+	) => {
 		setGroupFilter(group);
 		setTypeFilter(type_);
 		setOffset(0);
@@ -129,21 +160,21 @@ export function AgentCortex({ agentId }: AgentCortexProps) {
 					>
 						All
 					</button>
-				{FILTER_GROUPS.map((group) => (
-					<FilterButton
-						key={group.label}
-						onClick={() =>
-							handleFilterChange(
-								groupFilter === group.label ? null : group.label,
-								null,
-							)
-						}
-						active={groupFilter === group.label}
-						colorClass={EVENT_CATEGORY_COLORS[group.types[0]]}
-					>
-						{group.label}
-					</FilterButton>
-				))}
+					{FILTER_GROUPS.map((group) => (
+						<FilterButton
+							key={group.label}
+							onClick={() =>
+								handleFilterChange(
+									groupFilter === group.label ? null : group.label,
+									null,
+								)
+							}
+							active={groupFilter === group.label}
+							colorClass={EVENT_CATEGORY_COLORS[group.types[0]]}
+						>
+							{group.label}
+						</FilterButton>
+					))}
 
 					{/* Count + pagination + chat toggle */}
 					<div className="ml-auto flex items-center gap-3">
@@ -170,17 +201,17 @@ export function AgentCortex({ agentId }: AgentCortexProps) {
 								</button>
 							</div>
 						)}
-					<div className="flex overflow-hidden rounded-md border border-app-line bg-app-darkBox">
-						<Button
-							onClick={() => setChatOpen(!chatOpen)}
-							variant={chatOpen ? "secondary" : "ghost"}
-							size="icon"
-							className={chatOpen ? "bg-app-selected text-ink" : ""}
-							title="Toggle cortex chat"
-						>
-							<HugeiconsIcon icon={IdeaIcon} className="h-4 w-4" />
-						</Button>
-					</div>
+						<div className="flex overflow-hidden rounded-md border border-app-line bg-app-darkBox">
+							<Button
+								onClick={() => setChatOpen(!chatOpen)}
+								variant={chatOpen ? "secondary" : "ghost"}
+								size="icon"
+								className={chatOpen ? "bg-app-selected text-ink" : ""}
+								title="Toggle cortex chat"
+							>
+								<HugeiconsIcon icon={IdeaIcon} className="h-4 w-4" />
+							</Button>
+						</div>
 					</div>
 				</div>
 
@@ -199,7 +230,9 @@ export function AgentCortex({ agentId }: AgentCortexProps) {
 				) : events.length === 0 ? (
 					<div className="flex flex-1 items-center justify-center">
 						<p className="text-sm text-ink-faint">
-							{typeFilter || groupFilter ? "No events match this filter" : "No cortex events yet"}
+							{typeFilter || groupFilter
+								? "No events match this filter"
+								: "No cortex events yet"}
 						</p>
 					</div>
 				) : (
@@ -210,7 +243,9 @@ export function AgentCortex({ agentId }: AgentCortexProps) {
 								return (
 									<div key={event.id} className="border-b border-app-line/30">
 										<button
-											onClick={() => setExpandedId(isExpanded ? null : event.id)}
+											onClick={() =>
+												setExpandedId(isExpanded ? null : event.id)
+											}
 											className="flex w-full items-center gap-4 px-6 py-3 text-left transition-colors hover:bg-app-darkBox/30"
 										>
 											<span className="w-20 flex-shrink-0 text-tiny text-ink-faint">
@@ -233,7 +268,11 @@ export function AgentCortex({ agentId }: AgentCortexProps) {
 													initial={{ height: 0, opacity: 0 }}
 													animate={{ height: "auto", opacity: 1 }}
 													exit={{ height: 0, opacity: 0 }}
-													transition={{ type: "spring", stiffness: 500, damping: 35 }}
+													transition={{
+														type: "spring",
+														stiffness: 500,
+														damping: 35,
+													}}
 													className="overflow-hidden"
 												>
 													<div className="border-t border-app-line/20 bg-app-darkBox/20 px-6 py-4">

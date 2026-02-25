@@ -32,9 +32,7 @@ export function AgentTabs({ agentId }: { agentId: string }) {
 						to={tab.to}
 						params={{ agentId }}
 						className={`relative flex items-center px-3 text-sm transition-colors ${
-							isActive
-								? "text-ink"
-								: "text-ink-faint hover:text-ink-dull"
+							isActive ? "text-ink" : "text-ink-faint hover:text-ink-dull"
 						}`}
 					>
 						{tab.label}

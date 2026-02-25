@@ -19,7 +19,7 @@ export const FilterButton = React.forwardRef<
 			active
 				? colorClass || "bg-app-selected text-ink"
 				: "text-ink-faint hover:text-ink-dull",
-			className
+			className,
 		)}
 		{...props}
 	>

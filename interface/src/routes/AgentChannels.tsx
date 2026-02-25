@@ -71,15 +71,24 @@ export function AgentChannels({ agentId, liveStates }: AgentChannelsProps) {
 					<div className="flex h-full items-start justify-center pt-[15vh]">
 						<div className="flex max-w-sm flex-col items-center rounded-xl border border-dashed border-app-line/50 bg-app-darkBox/20 p-8 text-center">
 							<div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full border border-app-line bg-app-darkBox">
-								<HugeiconsIcon icon={Settings02Icon} className="h-6 w-6 text-ink-faint" />
+								<HugeiconsIcon
+									icon={Settings02Icon}
+									className="h-6 w-6 text-ink-faint"
+								/>
 							</div>
-							<h3 className="mb-1 font-plex text-sm font-medium text-ink">No channels yet</h3>
+							<h3 className="mb-1 font-plex text-sm font-medium text-ink">
+								No channels yet
+							</h3>
 							<p className="mb-5 max-w-md text-sm text-ink-faint">
-								Channels appear here once the bot receives its first message. Make sure a messaging platform is configured and bound to this agent in Settings.
+								Channels appear here once the bot receives its first message.
+								Make sure a messaging platform is configured and bound to this
+								agent in Settings.
 							</p>
-							<Button 
-								onClick={() => navigate({ to: "/settings", search: { tab: "channels" } })} 
-								variant="secondary" 
+							<Button
+								onClick={() =>
+									navigate({ to: "/settings", search: { tab: "channels" } })
+								}
+								variant="secondary"
 								size="sm"
 							>
 								Go to Settings

@@ -1,6 +1,6 @@
-import {useState, useRef, KeyboardEvent} from "react";
-import {X} from "lucide-react";
-import {Input} from "@/ui";
+import { useState, useRef, KeyboardEvent } from "react";
+import { X } from "lucide-react";
+import { Input } from "@/ui";
 
 interface TagInputProps {
 	value: string[];
@@ -9,7 +9,12 @@ interface TagInputProps {
 	className?: string;
 }
 
-export function TagInput({value, onChange, placeholder, className}: TagInputProps) {
+export function TagInput({
+	value,
+	onChange,
+	placeholder,
+	className,
+}: TagInputProps) {
 	const [inputValue, setInputValue] = useState("");
 	const inputRef = useRef<HTMLInputElement>(null);
 

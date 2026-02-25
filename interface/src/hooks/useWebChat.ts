@@ -65,7 +65,8 @@ export function useWebChat(agentId: string) {
 			try {
 				const response = await api.webChatHistory(agentId, sessionId);
 				if (!response.ok || cancelled) return;
-				const history: { id: string; role: string; content: string }[] = await response.json();
+				const history: { id: string; role: string; content: string }[] =
+					await response.json();
 				if (cancelled) return;
 				setMessages(
 					history.map((m) => ({
@@ -74,94 +75,118 @@ export function useWebChat(agentId: string) {
 						content: m.content,
 					})),
 				);
-			} catch { /* ignore — fresh session */ }
+			} catch {
+				/* ignore — fresh session */
+			}
 		})();
-		return () => { cancelled = true; };
+		return () => {
+			cancelled = true;
+		};
 	}, [agentId, sessionId]);
 
-	const sendMessage = useCallback(async (text: string) => {
-		if (isStreaming) return;
+	const sendMessage = useCallback(
+		async (text: string) => {
+			if (isStreaming) return;
 
-		setError(null);
-		setIsStreaming(true);
-		setToolActivity([]);
-		streamingTextRef.current = "";
-
-		const userMessage: WebChatMessage = {
-			id: `user-${Date.now()}`,
-			role: "user",
-			content: text,
-		};
-		setMessages((prev) => [...prev, userMessage]);
-
-		const assistantId = `assistant-${Date.now()}`;
-
-		try {
-			const response = await api.webChatSend(agentId, sessionId, text);
-			if (!response.ok) {
-				throw new Error(`HTTP ${response.status}`);
-			}
-
-			await consumeSSE(response, (eventType, data) => {
-				if (eventType === "tool_started") {
-					try {
-						const parsed = JSON.parse(data);
-						setToolActivity((prev) => [
-							...prev,
-							{ tool: parsed.ToolStarted?.tool_name ?? "tool", status: "running" },
-						]);
-					} catch { /* ignore */ }
-				} else if (eventType === "tool_completed") {
-					try {
-						const parsed = JSON.parse(data);
-						const toolName = parsed.ToolCompleted?.tool_name ?? "tool";
-						setToolActivity((prev) =>
-							prev.map((t) =>
-								t.tool === toolName && t.status === "running"
-									? { ...t, status: "done" }
-									: t,
-							),
-						);
-					} catch { /* ignore */ }
-				} else if (eventType === "text") {
-					try {
-						const parsed = JSON.parse(data);
-						const content = parsed.Text ?? "";
-						setMessages((prev) => {
-							const existing = prev.find((m) => m.id === assistantId);
-							if (existing) {
-								return prev.map((m) =>
-									m.id === assistantId ? { ...m, content } : m,
-								);
-							}
-							return [...prev, { id: assistantId, role: "assistant", content }];
-						});
-					} catch { /* ignore */ }
-				} else if (eventType === "stream_chunk") {
-					try {
-						const parsed = JSON.parse(data);
-						const chunk = parsed.StreamChunk ?? "";
-						streamingTextRef.current += chunk;
-						const accumulated = streamingTextRef.current;
-						setMessages((prev) => {
-							const existing = prev.find((m) => m.id === assistantId);
-							if (existing) {
-								return prev.map((m) =>
-									m.id === assistantId ? { ...m, content: accumulated } : m,
-								);
-							}
-							return [...prev, { id: assistantId, role: "assistant", content: accumulated }];
-						});
-					} catch { /* ignore */ }
-				}
-			});
-		} catch (error) {
-			setError(error instanceof Error ? error.message : "Request failed");
-		} finally {
-			setIsStreaming(false);
+			setError(null);
+			setIsStreaming(true);
 			setToolActivity([]);
-		}
-	}, [agentId, sessionId, isStreaming]);
+			streamingTextRef.current = "";
+
+			const userMessage: WebChatMessage = {
+				id: `user-${Date.now()}`,
+				role: "user",
+				content: text,
+			};
+			setMessages((prev) => [...prev, userMessage]);
+
+			const assistantId = `assistant-${Date.now()}`;
+
+			try {
+				const response = await api.webChatSend(agentId, sessionId, text);
+				if (!response.ok) {
+					throw new Error(`HTTP ${response.status}`);
+				}
+
+				await consumeSSE(response, (eventType, data) => {
+					if (eventType === "tool_started") {
+						try {
+							const parsed = JSON.parse(data);
+							setToolActivity((prev) => [
+								...prev,
+								{
+									tool: parsed.ToolStarted?.tool_name ?? "tool",
+									status: "running",
+								},
+							]);
+						} catch {
+							/* ignore */
+						}
+					} else if (eventType === "tool_completed") {
+						try {
+							const parsed = JSON.parse(data);
+							const toolName = parsed.ToolCompleted?.tool_name ?? "tool";
+							setToolActivity((prev) =>
+								prev.map((t) =>
+									t.tool === toolName && t.status === "running"
+										? { ...t, status: "done" }
+										: t,
+								),
+							);
+						} catch {
+							/* ignore */
+						}
+					} else if (eventType === "text") {
+						try {
+							const parsed = JSON.parse(data);
+							const content = parsed.Text ?? "";
+							setMessages((prev) => {
+								const existing = prev.find((m) => m.id === assistantId);
+								if (existing) {
+									return prev.map((m) =>
+										m.id === assistantId ? { ...m, content } : m,
+									);
+								}
+								return [
+									...prev,
+									{ id: assistantId, role: "assistant", content },
+								];
+							});
+						} catch {
+							/* ignore */
+						}
+					} else if (eventType === "stream_chunk") {
+						try {
+							const parsed = JSON.parse(data);
+							const chunk = parsed.StreamChunk ?? "";
+							streamingTextRef.current += chunk;
+							const accumulated = streamingTextRef.current;
+							setMessages((prev) => {
+								const existing = prev.find((m) => m.id === assistantId);
+								if (existing) {
+									return prev.map((m) =>
+										m.id === assistantId ? { ...m, content: accumulated } : m,
+									);
+								}
+								return [
+									...prev,
+									{ id: assistantId, role: "assistant", content: accumulated },
+								];
+							});
+						} catch {
+							/* ignore */
+						}
+					}
+				});
+			} catch (error) {
+				setError(error instanceof Error ? error.message : "Request failed");
+			} finally {
+				setIsStreaming(false);
+				setToolActivity([]);
+			}
+		},
+		[agentId, sessionId, isStreaming],
+	);
 
 	return { messages, isStreaming, error, toolActivity, sendMessage };
 }

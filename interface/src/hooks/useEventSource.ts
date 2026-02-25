@@ -2,7 +2,11 @@ import { useEffect, useRef, useCallback, useState } from "react";
 
 type EventHandler = (data: unknown) => void;
 
-export type ConnectionState = "connecting" | "connected" | "reconnecting" | "disconnected";
+export type ConnectionState =
+	| "connecting"
+	| "connected"
+	| "reconnecting"
+	| "disconnected";
 
 interface UseEventSourceOptions {
 	/** Map of SSE event types to handlers */
@@ -29,7 +33,8 @@ export function useEventSource(url: string, options: UseEventSourceOptions) {
 	const onReconnectRef = useRef(onReconnect);
 	onReconnectRef.current = onReconnect;
 
-	const [connectionState, setConnectionState] = useState<ConnectionState>("connecting");
+	const [connectionState, setConnectionState] =
+		useState<ConnectionState>("connecting");
 
 	const reconnectTimeout = useRef<ReturnType<typeof setTimeout>>();
 	const eventSourceRef = useRef<EventSource>();
@@ -41,7 +46,9 @@ export function useEventSource(url: string, options: UseEventSourceOptions) {
 			eventSourceRef.current.close();
 		}
 
-		setConnectionState(hadConnectionRef.current ? "reconnecting" : "connecting");
+		setConnectionState(
+			hadConnectionRef.current ? "reconnecting" : "connecting",
+		);
 
 		const source = new EventSource(url);
 		eventSourceRef.current = source;
@@ -86,7 +93,10 @@ export function useEventSource(url: string, options: UseEventSourceOptions) {
 			setConnectionState("reconnecting");
 
 			const delay = retryDelayRef.current;
-			retryDelayRef.current = Math.min(delay * BACKOFF_MULTIPLIER, MAX_RETRY_MS);
+			retryDelayRef.current = Math.min(
+				delay * BACKOFF_MULTIPLIER,
+				MAX_RETRY_MS,
+			);
 			reconnectTimeout.current = setTimeout(connect, delay);
 		};
 	}, [url]);

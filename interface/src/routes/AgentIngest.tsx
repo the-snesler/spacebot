@@ -1,11 +1,11 @@
-import {useState, useRef, useCallback} from "react";
-import {useQuery, useMutation, useQueryClient} from "@tanstack/react-query";
-import {api, type IngestFileInfo} from "@/api/client";
-import {formatTimeAgo} from "@/lib/format";
-import {Button, Badge} from "@/ui";
-import {clsx} from "clsx";
-import {FontAwesomeIcon} from "@fortawesome/react-fontawesome";
-import {faTrash} from "@fortawesome/free-solid-svg-icons";
+import { useState, useRef, useCallback } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { api, type IngestFileInfo } from "@/api/client";
+import { formatTimeAgo } from "@/lib/format";
+import { Button, Badge } from "@/ui";
+import { clsx } from "clsx";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faTrash } from "@fortawesome/free-solid-svg-icons";
 
 function formatFileSize(bytes: number): string {
 	if (bytes < 1024) return `${bytes} B`;
@@ -13,7 +13,7 @@ function formatFileSize(bytes: number): string {
 	return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function StatusBadge({status}: {status: IngestFileInfo["status"]}) {
+function StatusBadge({ status }: { status: IngestFileInfo["status"] }) {
 	const styles: Record<string, string> = {
 		queued: "bg-amber-500/20 text-amber-400",
 		processing: "bg-blue-500/20 text-blue-400",
@@ -38,13 +38,13 @@ interface AgentIngestProps {
 	agentId: string;
 }
 
-export function AgentIngest({agentId}: AgentIngestProps) {
+export function AgentIngest({ agentId }: AgentIngestProps) {
 	const queryClient = useQueryClient();
 	const fileInputRef = useRef<HTMLInputElement>(null);
 	const [isDragging, setIsDragging] = useState(false);
 	const dragCounter = useRef(0);
 
-	const {data, isLoading, error} = useQuery({
+	const { data, isLoading, error } = useQuery({
 		queryKey: ["ingest-files", agentId],
 		queryFn: () => api.ingestFiles(agentId),
 		refetchInterval: 5_000,
@@ -53,7 +53,7 @@ export function AgentIngest({agentId}: AgentIngestProps) {
 	const uploadMutation = useMutation({
 		mutationFn: (files: File[]) => api.uploadIngestFiles(agentId, files),
 		onSuccess: () => {
-			queryClient.invalidateQueries({queryKey: ["ingest-files", agentId]});
+			queryClient.invalidateQueries({ queryKey: ["ingest-files", agentId] });
 		},
 	});
 
@@ -61,7 +61,7 @@ export function AgentIngest({agentId}: AgentIngestProps) {
 		mutationFn: (contentHash: string) =>
 			api.deleteIngestFile(agentId, contentHash),
 		onSuccess: () => {
-			queryClient.invalidateQueries({queryKey: ["ingest-files", agentId]});
+			queryClient.invalidateQueries({ queryKey: ["ingest-files", agentId] });
 		},
 	});
 
@@ -285,7 +285,7 @@ function FileRow({
 						<div className="h-1 flex-1 overflow-hidden rounded-full bg-app-line">
 							<div
 								className="h-full rounded-full bg-blue-400 transition-all duration-500"
-								style={{width: `${progress}%`}}
+								style={{ width: `${progress}%` }}
 							/>
 						</div>
 						<span className="text-xs tabular-nums text-ink-faint">

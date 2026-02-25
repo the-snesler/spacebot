@@ -23,7 +23,11 @@ import { api, BASE_PATH } from "@/api/client";
 import type { ChannelLiveState } from "@/hooks/useChannelLiveState";
 import { useAgentOrder } from "@/hooks/useAgentOrder";
 import { Button } from "@/ui";
-import { ArrowLeft01Icon, DashboardSquare01Icon, Settings01Icon } from "@hugeicons/core-free-icons";
+import {
+	ArrowLeft01Icon,
+	DashboardSquare01Icon,
+	Settings01Icon,
+} from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { CreateAgentDialog } from "@/components/CreateAgentDialog";
 
@@ -40,7 +44,12 @@ interface SortableAgentItemProps {
 	collapsed: boolean;
 }
 
-function SortableAgentItem({ agentId, activity, isActive, collapsed }: SortableAgentItemProps) {
+function SortableAgentItem({
+	agentId,
+	activity,
+	isActive,
+	collapsed,
+}: SortableAgentItemProps) {
 	const {
 		attributes,
 		listeners,
@@ -54,7 +63,7 @@ function SortableAgentItem({ agentId, activity, isActive, collapsed }: SortableA
 		transform: CSS.Transform.toString(transform),
 		transition,
 		opacity: isDragging ? 0.5 : 1,
-		cursor: isDragging ? 'grabbing' : 'grab',
+		cursor: isDragging ? "grabbing" : "grab",
 	};
 
 	if (collapsed) {
@@ -64,9 +73,11 @@ function SortableAgentItem({ agentId, activity, isActive, collapsed }: SortableA
 					to="/agents/$agentId"
 					params={{ agentId }}
 					className={`flex h-8 w-8 items-center justify-center rounded-md text-xs font-medium ${
-						isActive ? "bg-sidebar-selected text-sidebar-ink" : "text-sidebar-inkDull hover:bg-sidebar-selected/50"
+						isActive
+							? "bg-sidebar-selected text-sidebar-ink"
+							: "text-sidebar-inkDull hover:bg-sidebar-selected/50"
 					}`}
-					style={{ pointerEvents: isDragging ? 'none' : 'auto' }}
+					style={{ pointerEvents: isDragging ? "none" : "auto" }}
 					title={agentId}
 				>
 					{agentId.charAt(0).toUpperCase()}
@@ -76,7 +87,13 @@ function SortableAgentItem({ agentId, activity, isActive, collapsed }: SortableA
 	}
 
 	return (
-		<div ref={setNodeRef} style={style} className="mx-2" {...attributes} {...listeners}>
+		<div
+			ref={setNodeRef}
+			style={style}
+			className="mx-2"
+			{...attributes}
+			{...listeners}
+		>
 			<Link
 				to="/agents/$agentId"
 				params={{ agentId }}
@@ -85,7 +102,7 @@ function SortableAgentItem({ agentId, activity, isActive, collapsed }: SortableA
 						? "bg-sidebar-selected text-sidebar-ink"
 						: "text-sidebar-inkDull hover:bg-sidebar-selected/50"
 				}`}
-				style={{ pointerEvents: isDragging ? 'none' : 'auto' }}
+				style={{ pointerEvents: isDragging ? "none" : "auto" }}
 			>
 				<span className="flex-1 truncate">{agentId}</span>
 				{activity && (activity.workers > 0 || activity.branches > 0) && (
@@ -124,7 +141,7 @@ export function Sidebar({ liveStates, collapsed, onToggle }: SidebarProps) {
 
 	const agents = agentsData?.agents ?? [];
 	const channels = channelsData?.channels ?? [];
-	
+
 	const agentIds = useMemo(() => agents.map((a) => a.id), [agents]);
 	const [agentOrder, setAgentOrder] = useAgentOrder(agentIds);
 
@@ -137,7 +154,8 @@ export function Sidebar({ liveStates, collapsed, onToggle }: SidebarProps) {
 		for (const channel of channels) {
 			const live = liveStates[channel.id];
 			if (!live) continue;
-			if (!byAgent[channel.agent_id]) byAgent[channel.agent_id] = { workers: 0, branches: 0 };
+			if (!byAgent[channel.agent_id])
+				byAgent[channel.agent_id] = { workers: 0, branches: 0 };
 			byAgent[channel.agent_id].workers += Object.keys(live.workers).length;
 			byAgent[channel.agent_id].branches += Object.keys(live.branches).length;
 		}
@@ -153,7 +171,7 @@ export function Sidebar({ liveStates, collapsed, onToggle }: SidebarProps) {
 		}),
 		useSensor(KeyboardSensor, {
 			coordinateGetter: sortableKeyboardCoordinates,
-		})
+		}),
 	);
 
 	const handleDragEnd = (event: DragEndEvent) => {
@@ -173,78 +191,102 @@ export function Sidebar({ liveStates, collapsed, onToggle }: SidebarProps) {
 		>
 			{/* Logo + collapse toggle */}
 			<div className="flex h-12 items-center border-b border-sidebar-line px-3">
-			{collapsed ? (
-				<button onClick={onToggle} className="flex h-full w-full items-center justify-center">
-					<img src={`${BASE_PATH}/ball.png`} alt="" className="h-6 w-6 transition-transform duration-150 ease-out hover:scale-110 active:scale-95" draggable={false} />
-				</button>
-			) : (
-				<div className="flex flex-1 items-center justify-between">
-					<Link to="/" className="flex items-center gap-2">
-						<img src={`${BASE_PATH}/ball.png`} alt="" className="h-6 w-6 flex-shrink-0 transition-transform duration-150 ease-out hover:scale-110 active:scale-95" draggable={false} />
-						<span className="whitespace-nowrap font-plex text-sm font-semibold text-sidebar-ink">
-							Spacebot
-						</span>
-					</Link>
-					<Button
+				{collapsed ? (
+					<button
 						onClick={onToggle}
-						variant="ghost"
-						size="icon"
-						className="h-6 w-6 text-sidebar-inkFaint hover:bg-sidebar-selected/50 hover:text-sidebar-inkDull"
+						className="flex h-full w-full items-center justify-center"
 					>
-						<HugeiconsIcon icon={ArrowLeft01Icon} className="h-4 w-4" />
-					</Button>
-				</div>
-			)}
+						<img
+							src={`${BASE_PATH}/ball.png`}
+							alt=""
+							className="h-6 w-6 transition-transform duration-150 ease-out hover:scale-110 active:scale-95"
+							draggable={false}
+						/>
+					</button>
+				) : (
+					<div className="flex flex-1 items-center justify-between">
+						<Link to="/" className="flex items-center gap-2">
+							<img
+								src={`${BASE_PATH}/ball.png`}
+								alt=""
+								className="h-6 w-6 flex-shrink-0 transition-transform duration-150 ease-out hover:scale-110 active:scale-95"
+								draggable={false}
+							/>
+							<span className="whitespace-nowrap font-plex text-sm font-semibold text-sidebar-ink">
+								Spacebot
+							</span>
+						</Link>
+						<Button
+							onClick={onToggle}
+							variant="ghost"
+							size="icon"
+							className="h-6 w-6 text-sidebar-inkFaint hover:bg-sidebar-selected/50 hover:text-sidebar-inkDull"
+						>
+							<HugeiconsIcon icon={ArrowLeft01Icon} className="h-4 w-4" />
+						</Button>
+					</div>
+				)}
 			</div>
 
 			{/* Collapsed: icon-only nav */}
 			{collapsed ? (
 				<div className="flex flex-col items-center gap-1 pt-2">
-				<Link
-					to="/"
-					className={`flex h-8 w-8 items-center justify-center rounded-md ${
-						isOverview ? "bg-sidebar-selected text-sidebar-ink" : "text-sidebar-inkDull hover:bg-sidebar-selected/50"
-					}`}
-					title="Dashboard"
-				>
-					<HugeiconsIcon icon={DashboardSquare01Icon} className="h-4 w-4" />
-				</Link>
-				<Link
-					to="/settings"
-					className={`flex h-8 w-8 items-center justify-center rounded-md ${
-						isSettings ? "bg-sidebar-selected text-sidebar-ink" : "text-sidebar-inkDull hover:bg-sidebar-selected/50"
-					}`}
-					title="Settings"
-				>
-					<HugeiconsIcon icon={Settings01Icon} className="h-4 w-4" />
-				</Link>
-				<div className="my-1 h-px w-5 bg-sidebar-line" />
-				<DndContext
-					sensors={sensors}
-					collisionDetection={closestCenter}
-					onDragEnd={handleDragEnd}
-				>
-					<SortableContext items={agentOrder} strategy={verticalListSortingStrategy}>
-						{agentOrder.map((agentId) => {
-							const isActive = !!matchRoute({ to: "/agents/$agentId", params: { agentId }, fuzzy: true });
-							return (
-								<SortableAgentItem
-									key={agentId}
-									agentId={agentId}
-									isActive={isActive}
-									collapsed={true}
-								/>
-							);
-						})}
-					</SortableContext>
-				</DndContext>
-				<button
-					onClick={() => setCreateOpen(true)}
-					className="flex h-8 w-8 items-center justify-center rounded-md text-sidebar-inkFaint hover:bg-sidebar-selected/50 hover:text-sidebar-inkDull"
-					title="New Agent"
-				>
-					+
-				</button>
+					<Link
+						to="/"
+						className={`flex h-8 w-8 items-center justify-center rounded-md ${
+							isOverview
+								? "bg-sidebar-selected text-sidebar-ink"
+								: "text-sidebar-inkDull hover:bg-sidebar-selected/50"
+						}`}
+						title="Dashboard"
+					>
+						<HugeiconsIcon icon={DashboardSquare01Icon} className="h-4 w-4" />
+					</Link>
+					<Link
+						to="/settings"
+						className={`flex h-8 w-8 items-center justify-center rounded-md ${
+							isSettings
+								? "bg-sidebar-selected text-sidebar-ink"
+								: "text-sidebar-inkDull hover:bg-sidebar-selected/50"
+						}`}
+						title="Settings"
+					>
+						<HugeiconsIcon icon={Settings01Icon} className="h-4 w-4" />
+					</Link>
+					<div className="my-1 h-px w-5 bg-sidebar-line" />
+					<DndContext
+						sensors={sensors}
+						collisionDetection={closestCenter}
+						onDragEnd={handleDragEnd}
+					>
+						<SortableContext
+							items={agentOrder}
+							strategy={verticalListSortingStrategy}
+						>
+							{agentOrder.map((agentId) => {
+								const isActive = !!matchRoute({
+									to: "/agents/$agentId",
+									params: { agentId },
+									fuzzy: true,
+								});
+								return (
+									<SortableAgentItem
+										key={agentId}
+										agentId={agentId}
+										isActive={isActive}
+										collapsed={true}
+									/>
+								);
+							})}
+						</SortableContext>
+					</DndContext>
+					<button
+						onClick={() => setCreateOpen(true)}
+						className="flex h-8 w-8 items-center justify-center rounded-md text-sidebar-inkFaint hover:bg-sidebar-selected/50 hover:text-sidebar-inkDull"
+						title="New Agent"
+					>
+						+
+					</button>
 				</div>
 			) : (
 				<>
@@ -260,17 +302,17 @@ export function Sidebar({ liveStates, collapsed, onToggle }: SidebarProps) {
 						>
 							Dashboard
 						</Link>
-					<Link
-						to="/settings"
-						className={`mx-2 flex items-center gap-2 rounded-md px-2 py-1.5 text-sm ${
-							isSettings
-								? "bg-sidebar-selected text-sidebar-ink"
-								: "text-sidebar-inkDull hover:bg-sidebar-selected/50"
-						}`}
-					>
-						Settings
-					</Link>
-				</div>
+						<Link
+							to="/settings"
+							className={`mx-2 flex items-center gap-2 rounded-md px-2 py-1.5 text-sm ${
+								isSettings
+									? "bg-sidebar-selected text-sidebar-ink"
+									: "text-sidebar-inkDull hover:bg-sidebar-selected/50"
+							}`}
+						>
+							Settings
+						</Link>
+					</div>
 
 					{/* Agents */}
 					<div className="flex flex-1 flex-col overflow-y-auto pt-3">
@@ -287,11 +329,18 @@ export function Sidebar({ liveStates, collapsed, onToggle }: SidebarProps) {
 								collisionDetection={closestCenter}
 								onDragEnd={handleDragEnd}
 							>
-								<SortableContext items={agentOrder} strategy={verticalListSortingStrategy}>
+								<SortableContext
+									items={agentOrder}
+									strategy={verticalListSortingStrategy}
+								>
 									<div className="flex flex-col gap-0.5">
 										{agentOrder.map((agentId) => {
 											const activity = agentActivity[agentId];
-											const isActive = !!matchRoute({ to: "/agents/$agentId", params: { agentId }, fuzzy: true });
+											const isActive = !!matchRoute({
+												to: "/agents/$agentId",
+												params: { agentId },
+												fuzzy: true,
+											});
 
 											return (
 												<SortableAgentItem
@@ -307,14 +356,14 @@ export function Sidebar({ liveStates, collapsed, onToggle }: SidebarProps) {
 								</SortableContext>
 							</DndContext>
 						)}
-					<Button
-						variant="outline"
-						size="sm"
-						onClick={() => setCreateOpen(true)}
-						className="mx-2 mt-1 w-auto justify-center border-dashed border-sidebar-line text-sidebar-inkFaint hover:border-sidebar-inkFaint hover:text-sidebar-inkDull"
-					>
-						+ New Agent
-					</Button>
+						<Button
+							variant="outline"
+							size="sm"
+							onClick={() => setCreateOpen(true)}
+							className="mx-2 mt-1 w-auto justify-center border-dashed border-sidebar-line text-sidebar-inkFaint hover:border-sidebar-inkFaint hover:text-sidebar-inkDull"
+						>
+							+ New Agent
+						</Button>
 					</div>
 				</>
 			)}

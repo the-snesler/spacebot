@@ -26,7 +26,9 @@ function ToolActivityIndicator({ activity }: { activity: ToolActivity[] }) {
 					) : (
 						<span className="h-1.5 w-1.5 rounded-full bg-green-400" />
 					)}
-					<span className="font-mono text-tiny text-ink-faint">{tool.tool}</span>
+					<span className="font-mono text-tiny text-ink-faint">
+						{tool.tool}
+					</span>
 					{tool.status === "done" && tool.result_preview && (
 						<span className="min-w-0 max-w-[120px] truncate text-tiny text-ink-faint/60">
 							{tool.result_preview.slice(0, 80)}
@@ -97,7 +99,9 @@ function CortexChatInput({
 					value={value}
 					onChange={(event) => onChange(event.target.value)}
 					onKeyDown={handleKeyDown}
-					placeholder={isStreaming ? "Waiting for response..." : "Message the cortex..."}
+					placeholder={
+						isStreaming ? "Waiting for response..." : "Message the cortex..."
+					}
 					disabled={isStreaming}
 					rows={1}
 					className="flex-1 resize-none bg-transparent px-1 py-1 text-sm text-ink placeholder:text-ink-faint/60 focus:outline-none disabled:opacity-40"
@@ -127,8 +131,13 @@ function CortexChatInput({
 	);
 }
 
-export function CortexChatPanel({ agentId, channelId, onClose }: CortexChatPanelProps) {
-	const { messages, isStreaming, error, toolActivity, sendMessage, newThread } = useCortexChat(agentId, channelId);
+export function CortexChatPanel({
+	agentId,
+	channelId,
+	onClose,
+}: CortexChatPanelProps) {
+	const { messages, isStreaming, error, toolActivity, sendMessage, newThread } =
+		useCortexChat(agentId, channelId);
 	const [input, setInput] = useState("");
 	const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -151,7 +160,9 @@ export function CortexChatPanel({ agentId, channelId, onClose }: CortexChatPanel
 					<span className="text-sm font-medium text-ink">Cortex</span>
 					{channelId && (
 						<span className="rounded-full bg-app-box px-2 py-0.5 text-tiny text-ink-faint">
-							{channelId.length > 20 ? `${channelId.slice(0, 20)}...` : channelId}
+							{channelId.length > 20
+								? `${channelId.slice(0, 20)}...`
+								: channelId}
 						</span>
 					)}
 				</div>

@@ -16,7 +16,10 @@ export function formatTimeAgo(dateStr: string): string {
 }
 
 export function formatTimestamp(ts: number): string {
-	return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+	return new Date(ts).toLocaleTimeString([], {
+		hour: "2-digit",
+		minute: "2-digit",
+	});
 }
 
 export function formatDuration(seconds: number): string {
@@ -26,23 +29,36 @@ export function formatDuration(seconds: number): string {
 
 export function platformIcon(platform: string): string {
 	switch (platform) {
-		case "discord": return "Discord";
-		case "slack": return "Slack";
-		case "telegram": return "Telegram";
-		case "twitch": return "Twitch";
-		case "webhook": return "Webhook";
-		case "cron": return "Cron";
-		default: return platform;
+		case "discord":
+			return "Discord";
+		case "slack":
+			return "Slack";
+		case "telegram":
+			return "Telegram";
+		case "twitch":
+			return "Twitch";
+		case "webhook":
+			return "Webhook";
+		case "cron":
+			return "Cron";
+		default:
+			return platform;
 	}
 }
 
 export function platformColor(platform: string): string {
 	switch (platform) {
-		case "discord": return "bg-indigo-500/20 text-indigo-400";
-		case "slack": return "bg-green-500/20 text-green-400";
-		case "telegram": return "bg-blue-500/20 text-blue-400";
-		case "twitch": return "bg-purple-500/20 text-purple-400";
-		case "cron": return "bg-amber-500/20 text-amber-400";
-		default: return "bg-gray-500/20 text-gray-400";
+		case "discord":
+			return "bg-indigo-500/20 text-indigo-400";
+		case "slack":
+			return "bg-green-500/20 text-green-400";
+		case "telegram":
+			return "bg-blue-500/20 text-blue-400";
+		case "twitch":
+			return "bg-purple-500/20 text-purple-400";
+		case "cron":
+			return "bg-amber-500/20 text-amber-400";
+		default:
+			return "bg-gray-500/20 text-gray-400";
 	}
 }

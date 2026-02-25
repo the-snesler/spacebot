@@ -82,15 +82,32 @@ function OllamaIcon({ size = 24, className }: IconProps) {
 			aria-hidden="true"
 			focusable="false"
 		>
-			<rect x="3" y="7" width="18" height="14" rx="3" stroke="currentColor" strokeWidth="1.5" />
+			<rect
+				x="3"
+				y="7"
+				width="18"
+				height="14"
+				rx="3"
+				stroke="currentColor"
+				strokeWidth="1.5"
+			/>
 			<circle cx="9" cy="13" r="1.5" fill="currentColor" />
 			<circle cx="15" cy="13" r="1.5" fill="currentColor" />
-			<path d="M12 3V7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+			<path
+				d="M12 3V7"
+				stroke="currentColor"
+				strokeWidth="1.5"
+				strokeLinecap="round"
+			/>
 		</svg>
 	);
 }
 
-export function ProviderIcon({ provider, className = "text-ink-faint", size = 24 }: ProviderIconProps) {
+export function ProviderIcon({
+	provider,
+	className = "text-ink-faint",
+	size = 24,
+}: ProviderIconProps) {
 	const iconProps: Partial<IconProps> = {
 		size,
 		className,

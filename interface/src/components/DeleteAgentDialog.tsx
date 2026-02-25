@@ -1,8 +1,16 @@
-import {useState} from "react";
-import {useMutation, useQueryClient} from "@tanstack/react-query";
-import {useNavigate} from "@tanstack/react-router";
-import {api} from "@/api/client";
-import {Button, Input, Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter} from "@/ui";
+import { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
+import { api } from "@/api/client";
+import {
+	Button,
+	Input,
+	Dialog,
+	DialogContent,
+	DialogHeader,
+	DialogTitle,
+	DialogFooter,
+} from "@/ui";
 
 interface DeleteAgentDialogProps {
 	open: boolean;
@@ -10,7 +18,11 @@ interface DeleteAgentDialogProps {
 	agentId: string;
 }
 
-export function DeleteAgentDialog({open, onOpenChange, agentId}: DeleteAgentDialogProps) {
+export function DeleteAgentDialog({
+	open,
+	onOpenChange,
+	agentId,
+}: DeleteAgentDialogProps) {
 	const [confirmation, setConfirmation] = useState("");
 	const [error, setError] = useState<string | null>(null);
 	const queryClient = useQueryClient();
@@ -20,12 +32,12 @@ export function DeleteAgentDialog({open, onOpenChange, agentId}: DeleteAgentDial
 		mutationFn: () => api.deleteAgent(agentId),
 		onSuccess: (result) => {
 			if (result.success) {
-				queryClient.invalidateQueries({queryKey: ["agents"]});
-				queryClient.invalidateQueries({queryKey: ["overview"]});
+				queryClient.invalidateQueries({ queryKey: ["agents"] });
+				queryClient.invalidateQueries({ queryKey: ["overview"] });
 				onOpenChange(false);
 				setConfirmation("");
 				setError(null);
-				navigate({to: "/"});
+				navigate({ to: "/" });
 			} else {
 				setError(result.message);
 			}
@@ -42,26 +54,39 @@ export function DeleteAgentDialog({open, onOpenChange, agentId}: DeleteAgentDial
 	}
 
 	return (
-		<Dialog open={open} onOpenChange={(v) => { if (!v) { setError(null); setConfirmation(""); } onOpenChange(v); }}>
+		<Dialog
+			open={open}
+			onOpenChange={(v) => {
+				if (!v) {
+					setError(null);
+					setConfirmation("");
+				}
+				onOpenChange(v);
+			}}
+		>
 			<DialogContent className="max-w-sm">
 				<DialogHeader>
 					<DialogTitle>Delete Agent</DialogTitle>
 				</DialogHeader>
 				<div className="flex flex-col gap-3">
 					<p className="text-sm text-ink-dull">
-						This will remove <span className="font-medium text-ink">{agentId}</span> from
-						your configuration. The agent's data directory will not be deleted.
+						This will remove{" "}
+						<span className="font-medium text-ink">{agentId}</span> from your
+						configuration. The agent's data directory will not be deleted.
 					</p>
 					<div>
 						<label className="mb-1.5 block text-sm font-medium text-ink-dull">
-							Type <span className="font-mono text-ink">{agentId}</span> to confirm
+							Type <span className="font-mono text-ink">{agentId}</span> to
+							confirm
 						</label>
 						<Input
 							size="lg"
 							value={confirmation}
 							onChange={(e) => setConfirmation(e.target.value)}
 							placeholder={agentId}
-							onKeyDown={(e) => { if (e.key === "Enter") handleSubmit(); }}
+							onKeyDown={(e) => {
+								if (e.key === "Enter") handleSubmit();
+							}}
 							autoFocus
 						/>
 					</div>

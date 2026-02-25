@@ -1,6 +1,16 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
-import { api, type SkillInfo, type RegistrySkill, type RegistryView } from "@/api/client";
+import {
+	useQuery,
+	useMutation,
+	useQueryClient,
+	useInfiniteQuery,
+} from "@tanstack/react-query";
+import {
+	api,
+	type SkillInfo,
+	type RegistrySkill,
+	type RegistryView,
+} from "@/api/client";
 import { Button, Badge } from "@/ui";
 import { clsx } from "clsx";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -59,7 +69,10 @@ function InstalledSkill({
 						<h3 className="font-plex text-sm font-medium text-ink">
 							{skill.name}
 						</h3>
-						<Badge variant={skill.source === "instance" ? "accent" : "green"} size="sm">
+						<Badge
+							variant={skill.source === "instance" ? "accent" : "green"}
+							size="sm"
+						>
 							{skill.source}
 						</Badge>
 					</div>
@@ -80,9 +93,7 @@ function InstalledSkill({
 					/>
 				</Button>
 			</div>
-			<p className="mt-3 font-mono text-xs text-ink-dull">
-				{skill.base_dir}
-			</p>
+			<p className="mt-3 font-mono text-xs text-ink-dull">{skill.base_dir}</p>
 		</div>
 	);
 }
@@ -111,7 +122,9 @@ function RegistrySkillCard({
 					/>
 				)}
 			</div>
-			<p className="mt-1 font-mono text-[11px] text-ink-dull/60">{skill.source}</p>
+			<p className="mt-1 font-mono text-[11px] text-ink-dull/60">
+				{skill.source}
+			</p>
 			<div className="mt-auto flex items-center justify-between gap-2 pt-3">
 				<span className="text-xs text-ink-faint">
 					{formatInstalls(skill.installs)} installs
@@ -231,7 +244,9 @@ export function AgentSkills({ agentId }: AgentSkillsProps) {
 	});
 
 	const installedSkills = skillsData?.skills ?? [];
-	const installedNames = new Set(installedSkills.map((s) => s.name.toLowerCase()));
+	const installedNames = new Set(
+		installedSkills.map((s) => s.name.toLowerCase()),
+	);
 
 	// Flatten browse pages or use search results
 	const registrySkills: RegistrySkill[] = debouncedSearch
@@ -351,13 +366,15 @@ export function AgentSkills({ agentId }: AgentSkillsProps) {
 								</div>
 							)}
 
-							{!isRegistryLoading && registrySkills.length === 0 && debouncedSearch && (
-								<div className="rounded-lg border border-app-line bg-app-box p-8 text-center">
-									<p className="text-sm text-ink-faint">
-										No skills found matching "{debouncedSearch}"
-									</p>
-								</div>
-							)}
+							{!isRegistryLoading &&
+								registrySkills.length === 0 &&
+								debouncedSearch && (
+									<div className="rounded-lg border border-app-line bg-app-box p-8 text-center">
+										<p className="text-sm text-ink-faint">
+											No skills found matching "{debouncedSearch}"
+										</p>
+									</div>
+								)}
 
 							<div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
 								{registrySkills.map((skill) => {
@@ -370,9 +387,7 @@ export function AgentSkills({ agentId }: AgentSkillsProps) {
 											key={`${skill.source}/${skill.skillId}`}
 											skill={skill}
 											isInstalled={isInstalled}
-											onInstall={() =>
-												installMutation.mutate(spec)
-											}
+											onInstall={() => installMutation.mutate(spec)}
 											isInstalling={
 												installMutation.isPending &&
 												installMutation.variables === spec

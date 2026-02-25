@@ -1,6 +1,17 @@
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faDiscord, faSlack, faTelegram, faTwitch, faWhatsapp } from "@fortawesome/free-brands-svg-icons";
-import { faLink, faEnvelope, faComments, faComment } from "@fortawesome/free-solid-svg-icons";
+import {
+	faDiscord,
+	faSlack,
+	faTelegram,
+	faTwitch,
+	faWhatsapp,
+} from "@fortawesome/free-brands-svg-icons";
+import {
+	faLink,
+	faEnvelope,
+	faComments,
+	faComment,
+} from "@fortawesome/free-solid-svg-icons";
 
 interface PlatformIconProps {
 	platform: string;
@@ -8,7 +19,11 @@ interface PlatformIconProps {
 	size?: "sm" | "lg" | "1x" | "2x";
 }
 
-export function PlatformIcon({ platform, className = "text-ink-faint", size = "1x" }: PlatformIconProps) {
+export function PlatformIcon({
+	platform,
+	className = "text-ink-faint",
+	size = "1x",
+}: PlatformIconProps) {
 	const iconMap: Record<string, any> = {
 		discord: faDiscord,
 		slack: faSlack,

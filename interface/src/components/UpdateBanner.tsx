@@ -27,7 +27,13 @@ export function UpdateBanner() {
 	const [applyError, setApplyError] = useState<string | null>(null);
 
 	// Platform-managed instances get updates via rollout, not self-service
-	if (!data || !data.update_available || dismissed || data.deployment === "hosted") return null;
+	if (
+		!data ||
+		!data.update_available ||
+		dismissed ||
+		data.deployment === "hosted"
+	)
+		return null;
 
 	const isApplying = applyMutation.isPending;
 
@@ -36,7 +42,9 @@ export function UpdateBanner() {
 			<Banner variant="cyan" dot="static" className="border-cyan-500/20">
 				<span>
 					Version <strong>{data.latest_version}</strong> is available
-					<span className="text-ink-faint ml-1">(current: {data.current_version})</span>
+					<span className="text-ink-faint ml-1">
+						(current: {data.current_version})
+					</span>
 				</span>
 				{data.release_url && (
 					<a

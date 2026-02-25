@@ -17,7 +17,10 @@ export interface NumberStepperProps {
 	variant?: "default" | "compact";
 }
 
-export const NumberStepper = React.forwardRef<HTMLDivElement, NumberStepperProps>(
+export const NumberStepper = React.forwardRef<
+	HTMLDivElement,
+	NumberStepperProps
+>(
 	(
 		{
 			label,
@@ -32,7 +35,7 @@ export const NumberStepper = React.forwardRef<HTMLDivElement, NumberStepperProps
 			showProgress = false,
 			variant = "default",
 		},
-		ref
+		ref,
 	) => {
 		const safeValue = value ?? 0;
 
@@ -52,16 +55,22 @@ export const NumberStepper = React.forwardRef<HTMLDivElement, NumberStepperProps
 		const handleInput = (e: React.ChangeEvent<HTMLInputElement>) => {
 			const raw = e.target.value;
 			if (type === "integer" && (raw === "" || raw === "-")) return;
-			if (type === "float" && (raw === "" || raw === "0." || raw === ".")) return;
+			if (type === "float" && (raw === "" || raw === "0." || raw === "."))
+				return;
 			const parsed = Number(raw);
 			if (!Number.isNaN(parsed)) onChange(clamp(parsed));
 		};
 
 		const displayValue =
 			type === "float" ? safeValue.toFixed(2) : safeValue.toString();
-		const inputWidth = variant === "compact" 
-			? (type === "float" ? "w-12" : "w-14")
-			: (type === "float" ? "w-16" : "w-20");
+		const inputWidth =
+			variant === "compact"
+				? type === "float"
+					? "w-12"
+					: "w-14"
+				: type === "float"
+					? "w-16"
+					: "w-20";
 
 		const progress =
 			showProgress && min !== undefined && max !== undefined
@@ -70,9 +79,15 @@ export const NumberStepper = React.forwardRef<HTMLDivElement, NumberStepperProps
 
 		return (
 			<div ref={ref} className="flex flex-col gap-1.5">
-				{label && <label className="text-sm font-medium text-ink">{label}</label>}
-				{description && <p className="text-tiny text-ink-faint">{description}</p>}
-				<div className={`flex items-center gap-2.5 ${(label || description) ? 'mt-1' : ''}`}>
+				{label && (
+					<label className="text-sm font-medium text-ink">{label}</label>
+				)}
+				{description && (
+					<p className="text-tiny text-ink-faint">{description}</p>
+				)}
+				<div
+					className={`flex items-center gap-2.5 ${label || description ? "mt-1" : ""}`}
+				>
 					<div className="flex items-stretch rounded-md border border-app-line/50 bg-app-darkBox/30 overflow-hidden">
 						<Button
 							type="button"
@@ -112,7 +127,7 @@ export const NumberStepper = React.forwardRef<HTMLDivElement, NumberStepperProps
 				</div>
 			</div>
 		);
-	}
+	},
 );
 
 NumberStepper.displayName = "NumberStepper";

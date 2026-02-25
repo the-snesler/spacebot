@@ -3,9 +3,18 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/api/client";
 import type { ChannelInfo } from "@/api/client";
-import type { ActiveBranch, ActiveWorker, ChannelLiveState } from "@/hooks/useChannelLiveState";
+import type {
+	ActiveBranch,
+	ActiveWorker,
+	ChannelLiveState,
+} from "@/hooks/useChannelLiveState";
 import { LiveDuration } from "@/components/LiveDuration";
-import { formatTimeAgo, formatTimestamp, platformIcon, platformColor } from "@/lib/format";
+import {
+	formatTimeAgo,
+	formatTimestamp,
+	platformIcon,
+	platformColor,
+} from "@/lib/format";
 
 const VISIBLE_MESSAGES = 6;
 
@@ -53,7 +62,15 @@ function BranchBadge({ branch }: { branch: ActiveBranch }) {
 					{displayTool && (
 						<>
 							<span className="text-ink-faint/50">·</span>
-							<span className={branch.currentTool ? "text-violet-400/70" : "text-violet-400/40"}>{displayTool}</span>
+							<span
+								className={
+									branch.currentTool
+										? "text-violet-400/70"
+										: "text-violet-400/40"
+								}
+							>
+								{displayTool}
+							</span>
 						</>
 					)}
 					{branch.toolCalls > 0 && (
@@ -111,7 +128,9 @@ export function ChannelCard({
 						)}
 					</div>
 					<div className="mt-1 flex items-center gap-2">
-						<span className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-tiny font-medium ${platformColor(channel.platform)}`}>
+						<span
+							className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-tiny font-medium ${platformColor(channel.platform)}`}
+						>
 							{platformIcon(channel.platform)}
 						</span>
 						<span className="text-tiny text-ink-faint">
@@ -136,15 +155,28 @@ export function ChannelCard({
 						className="rounded p-1 text-ink-faint opacity-0 transition-opacity hover:bg-ink/10 hover:text-ink group-hover/card:opacity-100"
 						title="Delete channel"
 					>
-						<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+						<svg
+							width="14"
+							height="14"
+							viewBox="0 0 16 16"
+							fill="none"
+							stroke="currentColor"
+							strokeWidth="1.5"
+							strokeLinecap="round"
+							strokeLinejoin="round"
+						>
 							<path d="M4 4l8 8M12 4l-8 8" />
 						</svg>
 					</button>
-					<div className={`h-2 w-2 rounded-full ${
-						hasActivity ? "bg-amber-400 animate-pulse" :
-						isTyping ? "bg-accent animate-pulse" :
-						"bg-green-500/60"
-					}`} />
+					<div
+						className={`h-2 w-2 rounded-full ${
+							hasActivity
+								? "bg-amber-400 animate-pulse"
+								: isTyping
+									? "bg-accent animate-pulse"
+									: "bg-green-500/60"
+						}`}
+					/>
 				</div>
 			</div>
 
@@ -183,12 +215,20 @@ export function ChannelCard({
 									<span className="flex-shrink-0 text-tiny text-ink-faint">
 										{formatTimestamp(new Date(message.created_at).getTime())}
 									</span>
-									<span className={`flex-shrink-0 text-tiny font-medium ${
-										message.role === "user" ? "text-accent-faint" : "text-green-400"
-									}`}>
-										{message.role === "user" ? (message.sender_name ?? "user") : (message.sender_name ?? "bot")}
+									<span
+										className={`flex-shrink-0 text-tiny font-medium ${
+											message.role === "user"
+												? "text-accent-faint"
+												: "text-green-400"
+										}`}
+									>
+										{message.role === "user"
+											? (message.sender_name ?? "user")
+											: (message.sender_name ?? "bot")}
 									</span>
-									<p className="line-clamp-1 text-sm text-ink-faint">{message.content}</p>
+									<p className="line-clamp-1 text-sm text-ink-faint">
+										{message.content}
+									</p>
 								</motion.div>
 							);
 						})}

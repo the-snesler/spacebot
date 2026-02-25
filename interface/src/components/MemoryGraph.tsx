@@ -14,7 +14,13 @@ import {
 } from "@/api/client";
 import { formatTimeAgo } from "@/lib/format";
 import { Button } from "@/ui";
-import { Target02Icon, PlusSignIcon, MinusSignIcon, RefreshIcon, Cancel01Icon } from "@hugeicons/core-free-icons";
+import {
+	Target02Icon,
+	PlusSignIcon,
+	MinusSignIcon,
+	RefreshIcon,
+	Cancel01Icon,
+} from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 
 // -- Constants --
@@ -158,7 +164,11 @@ export function MemoryGraph({ agentId, sort, typeFilter }: MemoryGraphProps) {
 						const res = { ...data };
 						if (hoveredNode && hoveredNode !== node) {
 							const graph = graphRef.current;
-							if (graph && !graph.hasEdge(hoveredNode, node) && !graph.hasEdge(node, hoveredNode)) {
+							if (
+								graph &&
+								!graph.hasEdge(hoveredNode, node) &&
+								!graph.hasEdge(node, hoveredNode)
+							) {
 								res.color = FADED_NODE_COLOR;
 								res.label = "";
 							}
@@ -233,7 +243,13 @@ export function MemoryGraph({ agentId, sort, typeFilter }: MemoryGraphProps) {
 			});
 		}
 
-		function handleDoubleClickNode({ node, event }: { node: string; event: { preventSigmaDefault: () => void } }) {
+		function handleDoubleClickNode({
+			node,
+			event,
+		}: {
+			node: string;
+			event: { preventSigmaDefault: () => void };
+		}) {
 			event.preventSigmaDefault();
 			expandNeighbors(node);
 		}
@@ -350,33 +366,43 @@ export function MemoryGraph({ agentId, sort, typeFilter }: MemoryGraphProps) {
 
 			{/* Legend */}
 			<div className="absolute bottom-4 left-4 z-10 rounded-md bg-app-darkBox/80 p-3 backdrop-blur-sm">
-				<div className="mb-2 text-tiny font-medium text-ink-faint">Node Types</div>
-				<div className="grid grid-cols-2 gap-x-4 gap-y-1">
-					{(Object.entries(NODE_COLORS) as [MemoryType, string][]).map(([type, color]) => (
-						<div key={type} className="flex items-center gap-1.5">
-							<span
-								className="inline-block h-2 w-2 rounded-full"
-								style={{ backgroundColor: color }}
-							/>
-							<span className="text-tiny text-ink-faint">{type}</span>
-						</div>
-					))}
+				<div className="mb-2 text-tiny font-medium text-ink-faint">
+					Node Types
 				</div>
-				<div className="mt-2 border-t border-app-line/30 pt-2">
-					<div className="mb-1 text-tiny font-medium text-ink-faint">Edge Types</div>
-					<div className="grid grid-cols-2 gap-x-4 gap-y-1">
-						{(Object.entries(EDGE_COLORS) as [RelationType, string][]).map(([type, color]) => (
+				<div className="grid grid-cols-2 gap-x-4 gap-y-1">
+					{(Object.entries(NODE_COLORS) as [MemoryType, string][]).map(
+						([type, color]) => (
 							<div key={type} className="flex items-center gap-1.5">
 								<span
-									className="inline-block h-0.5 w-3"
-									style={{
-										backgroundColor: color,
-										borderStyle: type === "contradicts" ? "dashed" : "solid",
-									}}
+									className="inline-block h-2 w-2 rounded-full"
+									style={{ backgroundColor: color }}
 								/>
-								<span className="text-tiny text-ink-faint">{type.replace("_", " ")}</span>
+								<span className="text-tiny text-ink-faint">{type}</span>
 							</div>
-						))}
+						),
+					)}
+				</div>
+				<div className="mt-2 border-t border-app-line/30 pt-2">
+					<div className="mb-1 text-tiny font-medium text-ink-faint">
+						Edge Types
+					</div>
+					<div className="grid grid-cols-2 gap-x-4 gap-y-1">
+						{(Object.entries(EDGE_COLORS) as [RelationType, string][]).map(
+							([type, color]) => (
+								<div key={type} className="flex items-center gap-1.5">
+									<span
+										className="inline-block h-0.5 w-3"
+										style={{
+											backgroundColor: color,
+											borderStyle: type === "contradicts" ? "dashed" : "solid",
+										}}
+									/>
+									<span className="text-tiny text-ink-faint">
+										{type.replace("_", " ")}
+									</span>
+								</div>
+							),
+						)}
 					</div>
 				</div>
 				<div className="mt-2 border-t border-app-line/30 pt-2 text-tiny text-ink-faint">
@@ -386,58 +412,60 @@ export function MemoryGraph({ agentId, sort, typeFilter }: MemoryGraphProps) {
 
 			{/* Controls */}
 			<div className="absolute right-4 top-4 z-10 flex flex-col gap-1.5">
-			<Button
-				onClick={() => sigmaRef.current?.getCamera().animatedReset()}
-				variant="ghost"
-				size="icon"
-				className="h-8 w-8 bg-app-darkBox/80 backdrop-blur-sm"
-				title="Reset zoom"
-			>
-				<HugeiconsIcon icon={Target02Icon} className="h-4 w-4" />
-			</Button>
-			<Button
-				onClick={() => {
-					const camera = sigmaRef.current?.getCamera();
-					if (camera) camera.animatedZoom({ duration: 200 });
-				}}
-				variant="ghost"
-				size="icon"
-				className="h-8 w-8 bg-app-darkBox/80 backdrop-blur-sm"
-				title="Zoom in"
-			>
-				<HugeiconsIcon icon={PlusSignIcon} className="h-4 w-4" />
-			</Button>
-			<Button
-				onClick={() => {
-					const camera = sigmaRef.current?.getCamera();
-					if (camera) camera.animatedUnzoom({ duration: 200 });
-				}}
-				variant="ghost"
-				size="icon"
-				className="h-8 w-8 bg-app-darkBox/80 backdrop-blur-sm"
-				title="Zoom out"
-			>
-				<HugeiconsIcon icon={MinusSignIcon} className="h-4 w-4" />
-			</Button>
-			<Button
-				onClick={() => {
-					const layout = layoutRef.current;
-					if (layout) {
-						if (layout.isRunning()) {
-							layout.stop();
-						} else {
-							layout.start();
-							setTimeout(() => { if (layout.isRunning()) layout.stop(); }, 3000);
+				<Button
+					onClick={() => sigmaRef.current?.getCamera().animatedReset()}
+					variant="ghost"
+					size="icon"
+					className="h-8 w-8 bg-app-darkBox/80 backdrop-blur-sm"
+					title="Reset zoom"
+				>
+					<HugeiconsIcon icon={Target02Icon} className="h-4 w-4" />
+				</Button>
+				<Button
+					onClick={() => {
+						const camera = sigmaRef.current?.getCamera();
+						if (camera) camera.animatedZoom({ duration: 200 });
+					}}
+					variant="ghost"
+					size="icon"
+					className="h-8 w-8 bg-app-darkBox/80 backdrop-blur-sm"
+					title="Zoom in"
+				>
+					<HugeiconsIcon icon={PlusSignIcon} className="h-4 w-4" />
+				</Button>
+				<Button
+					onClick={() => {
+						const camera = sigmaRef.current?.getCamera();
+						if (camera) camera.animatedUnzoom({ duration: 200 });
+					}}
+					variant="ghost"
+					size="icon"
+					className="h-8 w-8 bg-app-darkBox/80 backdrop-blur-sm"
+					title="Zoom out"
+				>
+					<HugeiconsIcon icon={MinusSignIcon} className="h-4 w-4" />
+				</Button>
+				<Button
+					onClick={() => {
+						const layout = layoutRef.current;
+						if (layout) {
+							if (layout.isRunning()) {
+								layout.stop();
+							} else {
+								layout.start();
+								setTimeout(() => {
+									if (layout.isRunning()) layout.stop();
+								}, 3000);
+							}
 						}
-					}
-				}}
-				variant="ghost"
-				size="icon"
-				className="h-8 w-8 bg-app-darkBox/80 backdrop-blur-sm"
-				title="Re-run layout"
-			>
-				<HugeiconsIcon icon={RefreshIcon} className="h-4 w-4" />
-			</Button>
+					}}
+					variant="ghost"
+					size="icon"
+					className="h-8 w-8 bg-app-darkBox/80 backdrop-blur-sm"
+					title="Re-run layout"
+				>
+					<HugeiconsIcon icon={RefreshIcon} className="h-4 w-4" />
+				</Button>
 			</div>
 
 			{/* Node detail panel */}
@@ -460,22 +488,26 @@ export function MemoryGraph({ agentId, sort, typeFilter }: MemoryGraphProps) {
 							>
 								{selectedNode.memory.memory_type}
 							</span>
-						<Button
-							onClick={() => setSelectedNode(null)}
-							variant="ghost"
-							size="icon"
-							className="h-7 w-7"
-						>
-							<HugeiconsIcon icon={Cancel01Icon} className="h-3.5 w-3.5" />
-						</Button>
+							<Button
+								onClick={() => setSelectedNode(null)}
+								variant="ghost"
+								size="icon"
+								className="h-7 w-7"
+							>
+								<HugeiconsIcon icon={Cancel01Icon} className="h-3.5 w-3.5" />
+							</Button>
 						</div>
 						<p className="mb-3 max-h-32 overflow-y-auto whitespace-pre-wrap text-sm leading-relaxed text-ink-dull">
 							{selectedNode.memory.content}
 						</p>
 						<div className="flex flex-wrap gap-x-4 gap-y-1 text-tiny text-ink-faint">
-							<span>Importance: {selectedNode.memory.importance.toFixed(2)}</span>
+							<span>
+								Importance: {selectedNode.memory.importance.toFixed(2)}
+							</span>
 							<span>Accessed: {selectedNode.memory.access_count}x</span>
-							<span>Created: {formatTimeAgo(selectedNode.memory.created_at)}</span>
+							<span>
+								Created: {formatTimeAgo(selectedNode.memory.created_at)}
+							</span>
 							{selectedNode.memory.source && (
 								<span>Source: {selectedNode.memory.source}</span>
 							)}

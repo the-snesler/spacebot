@@ -13,7 +13,7 @@ export function useAgentOrder(agentIds: string[]) {
 	useEffect(() => {
 		const stored = localStorage.getItem(STORAGE_KEY);
 		let storedOrder: string[] = [];
-		
+
 		if (stored) {
 			try {
 				storedOrder = JSON.parse(stored);
@@ -26,7 +26,7 @@ export function useAgentOrder(agentIds: string[]) {
 		const storedSet = new Set(storedOrder);
 		const newAgents = agentIds.filter((id) => !storedSet.has(id));
 		const validStoredOrder = storedOrder.filter((id) => agentIds.includes(id));
-		
+
 		setOrder([...validStoredOrder, ...newAgents]);
 	}, [agentIds]);
 

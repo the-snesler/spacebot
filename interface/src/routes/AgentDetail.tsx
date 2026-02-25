@@ -1,7 +1,12 @@
 import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { api, type CortexEvent, type CronJobInfo, MEMORY_TYPES } from "@/api/client";
+import {
+	api,
+	type CortexEvent,
+	type CronJobInfo,
+	MEMORY_TYPES,
+} from "@/api/client";
 import type { ChannelLiveState } from "@/hooks/useChannelLiveState";
 import { formatTimeAgo, formatDuration } from "@/lib/format";
 import { DeleteAgentDialog } from "@/components/DeleteAgentDialog";
@@ -85,7 +90,8 @@ export function AgentDetail({ agentId, liveStates }: AgentDetailProps) {
 		);
 	}
 
-	const hasLiveActivity = activity.workers > 0 || activity.branches > 0 || activity.typing > 0;
+	const hasLiveActivity =
+		activity.workers > 0 || activity.branches > 0 || activity.typing > 0;
 
 	return (
 		<div className="h-full overflow-y-auto">
@@ -99,7 +105,11 @@ export function AgentDetail({ agentId, liveStates }: AgentDetailProps) {
 					hasLiveActivity={hasLiveActivity}
 					onDelete={() => setDeleteOpen(true)}
 				/>
-				<DeleteAgentDialog open={deleteOpen} onOpenChange={setDeleteOpen} agentId={agentId} />
+				<DeleteAgentDialog
+					open={deleteOpen}
+					onOpenChange={setDeleteOpen}
+					agentId={agentId}
+				/>
 
 				{/* Bulletin - the most important text */}
 				{overviewData?.latest_bulletin && (
@@ -112,7 +122,9 @@ export function AgentDetail({ agentId, liveStates }: AgentDetailProps) {
 						{/* Memory Growth Chart */}
 						<div className="col-span-1 lg:col-span-2 rounded-xl bg-app-darkBox p-5">
 							<div className="mb-4 flex items-center justify-between">
-								<h3 className="font-plex text-sm font-medium text-ink-dull">Memory Growth</h3>
+								<h3 className="font-plex text-sm font-medium text-ink-dull">
+									Memory Growth
+								</h3>
 								<span className="text-tiny text-ink-faint">Last 30 days</span>
 							</div>
 							<MemoryGrowthChart data={overviewData.memory_daily} />
@@ -121,8 +133,12 @@ export function AgentDetail({ agentId, liveStates }: AgentDetailProps) {
 						{/* Activity Heatmap */}
 						<div className="rounded-xl bg-app-darkBox p-5">
 							<div className="mb-4 flex items-center justify-between">
-								<h3 className="font-plex text-sm font-medium text-ink-dull">Activity Heatmap</h3>
-								<span className="text-tiny text-ink-faint">Messages by day/hour</span>
+								<h3 className="font-plex text-sm font-medium text-ink-dull">
+									Activity Heatmap
+								</h3>
+								<span className="text-tiny text-ink-faint">
+									Messages by day/hour
+								</span>
 							</div>
 							<ActivityHeatmap data={overviewData.activity_heatmap} />
 						</div>
@@ -130,8 +146,12 @@ export function AgentDetail({ agentId, liveStates }: AgentDetailProps) {
 						{/* Process Activity Chart */}
 						<div className="rounded-xl bg-app-darkBox p-5">
 							<div className="mb-4 flex items-center justify-between">
-								<h3 className="font-plex text-sm font-medium text-ink-dull">Process Activity</h3>
-								<span className="text-tiny text-ink-faint">Branches + Workers</span>
+								<h3 className="font-plex text-sm font-medium text-ink-dull">
+									Process Activity
+								</h3>
+								<span className="text-tiny text-ink-faint">
+									Branches + Workers
+								</span>
 							</div>
 							<ProcessActivityChart data={overviewData.activity_daily} />
 						</div>
@@ -144,8 +164,12 @@ export function AgentDetail({ agentId, liveStates }: AgentDetailProps) {
 						{/* Memory Donut */}
 						<div className="rounded-xl bg-app-darkBox p-5">
 							<div className="mb-4 flex items-center justify-between">
-								<h3 className="font-plex text-sm font-medium text-ink-dull">Memory Types</h3>
-								<span className="text-2xl font-medium tabular-nums text-ink">{overviewData.memory_total}</span>
+								<h3 className="font-plex text-sm font-medium text-ink-dull">
+									Memory Types
+								</h3>
+								<span className="text-2xl font-medium tabular-nums text-ink">
+									{overviewData.memory_total}
+								</span>
 							</div>
 							<MemoryDonut counts={overviewData.memory_counts} />
 						</div>
@@ -154,7 +178,9 @@ export function AgentDetail({ agentId, liveStates }: AgentDetailProps) {
 						{configData && (
 							<div className="rounded-xl bg-app-darkBox p-5">
 								<div className="mb-4 flex items-center justify-between">
-									<h3 className="font-plex text-sm font-medium text-ink-dull">Model Routing</h3>
+									<h3 className="font-plex text-sm font-medium text-ink-dull">
+										Model Routing
+									</h3>
 									<Link
 										to="/agents/$agentId/config"
 										params={{ agentId }}
@@ -170,13 +196,24 @@ export function AgentDetail({ agentId, liveStates }: AgentDetailProps) {
 						{/* Quick Stats */}
 						<div className="rounded-xl bg-app-darkBox p-5">
 							<div className="mb-4">
-								<h3 className="font-plex text-sm font-medium text-ink-dull">Configuration</h3>
+								<h3 className="font-plex text-sm font-medium text-ink-dull">
+									Configuration
+								</h3>
 							</div>
 							<div className="flex flex-col gap-3">
-								<StatRow label="Context Window" value={agent.context_window.toLocaleString()} />
+								<StatRow
+									label="Context Window"
+									value={agent.context_window.toLocaleString()}
+								/>
 								<StatRow label="Max Turns" value={String(agent.max_turns)} />
-								<StatRow label="Max Branches" value={String(agent.max_concurrent_branches)} />
-								<StatRow label="Max Workers" value={String(agent.max_concurrent_workers)} />
+								<StatRow
+									label="Max Branches"
+									value={String(agent.max_concurrent_branches)}
+								/>
+								<StatRow
+									label="Max Workers"
+									value={String(agent.max_concurrent_workers)}
+								/>
 								<StatRow label="Workspace" value={agent.workspace} truncate />
 							</div>
 						</div>
@@ -184,7 +221,9 @@ export function AgentDetail({ agentId, liveStates }: AgentDetailProps) {
 				)}
 
 				{/* Identity Preview */}
-				{identityData && <IdentitySection agentId={agentId} identity={identityData} />}
+				{identityData && (
+					<IdentitySection agentId={agentId} identity={identityData} />
+				)}
 
 				{/* Cron Jobs */}
 				{overviewData && overviewData.cron_jobs.length > 0 && (
@@ -225,11 +264,17 @@ function HeroSection({
 		<div className="flex flex-col gap-4 border-b border-app-line pb-6">
 			<div className="flex items-start justify-between">
 				<div>
-					<h1 className="font-plex text-3xl font-semibold text-ink">{agentId}</h1>
+					<h1 className="font-plex text-3xl font-semibold text-ink">
+						{agentId}
+					</h1>
 					<div className="mt-2 flex items-center gap-4 text-sm">
 						<div className="flex items-center gap-2">
-							<div className={`h-2 w-2 rounded-full ${hasLiveActivity ? "animate-pulse bg-amber-400" : "bg-green-500"}`} />
-							<span className="text-ink-dull">{hasLiveActivity ? "Active" : "Idle"}</span>
+							<div
+								className={`h-2 w-2 rounded-full ${hasLiveActivity ? "animate-pulse bg-amber-400" : "bg-green-500"}`}
+							/>
+							<span className="text-ink-dull">
+								{hasLiveActivity ? "Active" : "Idle"}
+							</span>
 						</div>
 						<Link
 							to="/agents/$agentId/channels"
@@ -253,13 +298,17 @@ function HeroSection({
 					{workers > 0 && (
 						<div className="flex items-center gap-2 rounded-full bg-amber-500/10 px-3 py-1.5 text-sm">
 							<div className="h-2 w-2 animate-pulse rounded-full bg-amber-400" />
-							<span className="font-medium text-amber-400">{workers} worker{workers !== 1 ? "s" : ""}</span>
+							<span className="font-medium text-amber-400">
+								{workers} worker{workers !== 1 ? "s" : ""}
+							</span>
 						</div>
 					)}
 					{branches > 0 && (
 						<div className="flex items-center gap-2 rounded-full bg-violet-500/10 px-3 py-1.5 text-sm">
 							<div className="h-2 w-2 animate-pulse rounded-full bg-violet-400" />
-							<span className="font-medium text-violet-400">{branches} branch{branches !== 1 ? "es" : ""}</span>
+							<span className="font-medium text-violet-400">
+								{branches} branch{branches !== 1 ? "es" : ""}
+							</span>
 						</div>
 					)}
 				</div>
@@ -272,13 +321,18 @@ function BulletinSection({ bulletin }: { bulletin: string }) {
 	const [expanded, setExpanded] = useState(false);
 	const lines = bulletin.split("\n");
 	const shouldTruncate = lines.length > 6;
-	const displayText = expanded || !shouldTruncate ? bulletin : lines.slice(0, 6).join("\n") + "\n...";
+	const displayText =
+		expanded || !shouldTruncate
+			? bulletin
+			: lines.slice(0, 6).join("\n") + "\n...";
 
 	return (
 		<div className="mt-6 rounded-xl border border-accent/20 bg-accent/5 p-5">
 			<div className="mb-3 flex items-center gap-2">
 				<div className="h-2 w-2 rounded-full bg-accent" />
-				<h3 className="font-plex text-sm font-medium text-accent">Latest Memory Bulletin</h3>
+				<h3 className="font-plex text-sm font-medium text-accent">
+					Latest Memory Bulletin
+				</h3>
 			</div>
 			<div className="whitespace-pre-wrap text-sm leading-relaxed text-ink-dull">
 				{displayText}
@@ -324,9 +378,17 @@ const MEMORY_TYPE_COLORS = [
 	"#ef4444", // todo - red
 ];
 
-function MemoryGrowthChart({ data }: { data: { date: string; count: number }[] }) {
+function MemoryGrowthChart({
+	data,
+}: {
+	data: { date: string; count: number }[];
+}) {
 	if (data.length === 0) {
-		return <div className="h-48 flex items-center justify-center text-ink-faint text-sm">No data</div>;
+		return (
+			<div className="h-48 flex items-center justify-center text-ink-faint text-sm">
+				No data
+			</div>
+		);
 	}
 
 	// Calculate cumulative for area effect
@@ -334,7 +396,10 @@ function MemoryGrowthChart({ data }: { data: { date: string; count: number }[] }
 	const chartData = data.map((d) => {
 		cumulative += d.count;
 		return {
-			date: new Date(d.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+			date: new Date(d.date).toLocaleDateString("en-US", {
+				month: "short",
+				day: "numeric",
+			}),
 			daily: d.count,
 			total: cumulative,
 		};
@@ -343,14 +408,29 @@ function MemoryGrowthChart({ data }: { data: { date: string; count: number }[] }
 	return (
 		<div className="h-48">
 			<ResponsiveContainer width="100%" height="100%">
-				<AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+				<AreaChart
+					data={chartData}
+					margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+				>
 					<defs>
 						<linearGradient id="memoryGradient" x1="0" y1="0" x2="0" y2="1">
-							<stop offset="5%" stopColor={CHART_COLORS.accent} stopOpacity={0.4} />
-							<stop offset="95%" stopColor={CHART_COLORS.accent} stopOpacity={0.05} />
+							<stop
+								offset="5%"
+								stopColor={CHART_COLORS.accent}
+								stopOpacity={0.4}
+							/>
+							<stop
+								offset="95%"
+								stopColor={CHART_COLORS.accent}
+								stopOpacity={0.05}
+							/>
 						</linearGradient>
 					</defs>
-					<CartesianGrid stroke={CHART_COLORS.grid} strokeDasharray="3 3" vertical={false} />
+					<CartesianGrid
+						stroke={CHART_COLORS.grid}
+						strokeDasharray="3 3"
+						vertical={false}
+					/>
 					<XAxis
 						dataKey="date"
 						stroke={CHART_COLORS.axis}
@@ -390,13 +470,24 @@ function MemoryGrowthChart({ data }: { data: { date: string; count: number }[] }
 	);
 }
 
-function ProcessActivityChart({ data }: { data: { date: string; branches: number; workers: number }[] }) {
+function ProcessActivityChart({
+	data,
+}: {
+	data: { date: string; branches: number; workers: number }[];
+}) {
 	if (data.length === 0) {
-		return <div className="h-48 flex items-center justify-center text-ink-faint text-sm">No activity</div>;
+		return (
+			<div className="h-48 flex items-center justify-center text-ink-faint text-sm">
+				No activity
+			</div>
+		);
 	}
 
 	const chartData = data.map((d) => ({
-		date: new Date(d.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+		date: new Date(d.date).toLocaleDateString("en-US", {
+			month: "short",
+			day: "numeric",
+		}),
 		branches: d.branches,
 		workers: d.workers,
 	}));
@@ -404,18 +495,41 @@ function ProcessActivityChart({ data }: { data: { date: string; branches: number
 	return (
 		<div className="h-48">
 			<ResponsiveContainer width="100%" height="100%">
-				<AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+				<AreaChart
+					data={chartData}
+					margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+				>
 					<defs>
 						<linearGradient id="branchGradient" x1="0" y1="0" x2="0" y2="1">
-							<stop offset="5%" stopColor={CHART_COLORS.violet} stopOpacity={0.4} />
-							<stop offset="95%" stopColor={CHART_COLORS.violet} stopOpacity={0.05} />
+							<stop
+								offset="5%"
+								stopColor={CHART_COLORS.violet}
+								stopOpacity={0.4}
+							/>
+							<stop
+								offset="95%"
+								stopColor={CHART_COLORS.violet}
+								stopOpacity={0.05}
+							/>
 						</linearGradient>
 						<linearGradient id="workerGradient" x1="0" y1="0" x2="0" y2="1">
-							<stop offset="5%" stopColor={CHART_COLORS.amber} stopOpacity={0.4} />
-							<stop offset="95%" stopColor={CHART_COLORS.amber} stopOpacity={0.05} />
+							<stop
+								offset="5%"
+								stopColor={CHART_COLORS.amber}
+								stopOpacity={0.4}
+							/>
+							<stop
+								offset="95%"
+								stopColor={CHART_COLORS.amber}
+								stopOpacity={0.05}
+							/>
 						</linearGradient>
 					</defs>
-					<CartesianGrid stroke={CHART_COLORS.grid} strokeDasharray="3 3" vertical={false} />
+					<CartesianGrid
+						stroke={CHART_COLORS.grid}
+						strokeDasharray="3 3"
+						vertical={false}
+					/>
 					<XAxis
 						dataKey="date"
 						stroke={CHART_COLORS.axis}
@@ -463,9 +577,17 @@ function ProcessActivityChart({ data }: { data: { date: string; branches: number
 	);
 }
 
-function ActivityHeatmap({ data }: { data: { day: number; hour: number; count: number }[] }) {
+function ActivityHeatmap({
+	data,
+}: {
+	data: { day: number; hour: number; count: number }[];
+}) {
 	if (data.length === 0) {
-		return <div className="h-48 flex items-center justify-center text-ink-faint text-sm">No activity data</div>;
+		return (
+			<div className="h-48 flex items-center justify-center text-ink-faint text-sm">
+				No activity data
+			</div>
+		);
 	}
 
 	const maxCount = Math.max(...data.map((d) => d.count), 1);
@@ -489,7 +611,10 @@ function ActivityHeatmap({ data }: { data: { day: number; hour: number; count: n
 				<div className="flex gap-1">
 					<div className="w-8 flex-shrink-0" /> {/* Day label spacer */}
 					{Array.from({ length: 24 }, (_, h) => (
-						<div key={h} className="w-4 flex-shrink-0 text-center text-[10px] text-ink-faint">
+						<div
+							key={h}
+							className="w-4 flex-shrink-0 text-center text-[10px] text-ink-faint"
+						>
 							{h % 6 === 0 ? h : ""}
 						</div>
 					))}
@@ -497,7 +622,9 @@ function ActivityHeatmap({ data }: { data: { day: number; hour: number; count: n
 				{/* Heatmap grid */}
 				{days.map((dayLabel, day) => (
 					<div key={day} className="flex items-center gap-1">
-						<div className="w-8 flex-shrink-0 text-[10px] text-ink-faint">{dayLabel}</div>
+						<div className="w-8 flex-shrink-0 text-[10px] text-ink-faint">
+							{dayLabel}
+						</div>
 						<div className="flex gap-1">
 							{Array.from({ length: 24 }, (_, hour) => {
 								const count = getCell(day, hour);
@@ -526,7 +653,11 @@ function MemoryDonut({ counts }: { counts: Record<string, number> }) {
 	})).filter((d) => d.value > 0);
 
 	if (data.length === 0) {
-		return <div className="h-48 flex items-center justify-center text-ink-faint text-sm">No memories</div>;
+		return (
+			<div className="h-48 flex items-center justify-center text-ink-faint text-sm">
+				No memories
+			</div>
+		);
 	}
 
 	return (
@@ -564,7 +695,10 @@ function MemoryDonut({ counts }: { counts: Record<string, number> }) {
 			<div className="mt-2 flex flex-wrap justify-center gap-2">
 				{data.map((item) => (
 					<div key={item.name} className="flex items-center gap-1.5 text-tiny">
-						<div className="h-2 w-2 rounded-full" style={{ backgroundColor: item.color }} />
+						<div
+							className="h-2 w-2 rounded-full"
+							style={{ backgroundColor: item.color }}
+						/>
 						<span className="text-ink-faint">{item.name}</span>
 						<span className="tabular-nums text-ink-dull">{item.value}</span>
 					</div>
@@ -576,12 +710,32 @@ function MemoryDonut({ counts }: { counts: Record<string, number> }) {
 
 // -- List Components --
 
-function ModelRoutingList({ config }: { config: { routing: { channel: string; branch: string; worker: string; compactor: string; cortex: string } } }) {
+function ModelRoutingList({
+	config,
+}: {
+	config: {
+		routing: {
+			channel: string;
+			branch: string;
+			worker: string;
+			compactor: string;
+			cortex: string;
+		};
+	};
+}) {
 	const models = [
-		{ label: "Channel", model: config.routing.channel, color: "text-green-400" },
+		{
+			label: "Channel",
+			model: config.routing.channel,
+			color: "text-green-400",
+		},
 		{ label: "Branch", model: config.routing.branch, color: "text-violet-400" },
 		{ label: "Worker", model: config.routing.worker, color: "text-amber-400" },
-		{ label: "Compactor", model: config.routing.compactor, color: "text-blue-400" },
+		{
+			label: "Compactor",
+			model: config.routing.compactor,
+			color: "text-blue-400",
+		},
 		{ label: "Cortex", model: config.routing.cortex, color: "text-pink-400" },
 	];
 
@@ -590,7 +744,10 @@ function ModelRoutingList({ config }: { config: { routing: { channel: string; br
 			{models.map(({ label, model, color }) => (
 				<div key={label} className="flex items-center justify-between">
 					<span className="text-tiny text-ink-faint">{label}</span>
-					<span className={`text-sm ${color} truncate max-w-[140px]`} title={model}>
+					<span
+						className={`text-sm ${color} truncate max-w-[140px]`}
+						title={model}
+					>
 						{formatModelName(model)}
 					</span>
 				</div>
@@ -599,11 +756,22 @@ function ModelRoutingList({ config }: { config: { routing: { channel: string; br
 	);
 }
 
-function StatRow({ label, value, truncate }: { label: string; value: string; truncate?: boolean }) {
+function StatRow({
+	label,
+	value,
+	truncate,
+}: {
+	label: string;
+	value: string;
+	truncate?: boolean;
+}) {
 	return (
 		<div className="flex items-center justify-between">
 			<span className="text-tiny text-ink-faint">{label}</span>
-			<span className={`text-sm text-ink-dull ${truncate ? "truncate max-w-[200px]" : ""}`} title={value}>
+			<span
+				className={`text-sm text-ink-dull ${truncate ? "truncate max-w-[200px]" : ""}`}
+				title={value}
+			>
 				{value}
 			</span>
 		</div>
@@ -612,7 +780,10 @@ function StatRow({ label, value, truncate }: { label: string; value: string; tru
 
 function formatModelName(model: string): string {
 	const name = model.includes("/") ? model.split("/").pop()! : model;
-	return name.replace(/-\d{8}$/, "").replace(/claude-/, "claude-").replace(/-202[0-9]+/, "");
+	return name
+		.replace(/-\d{8}$/, "")
+		.replace(/claude-/, "claude-")
+		.replace(/-202[0-9]+/, "");
 }
 
 // -- Other Sections --
@@ -622,7 +793,11 @@ function IdentitySection({
 	identity,
 }: {
 	agentId: string;
-	identity: { soul: string | null; identity: string | null; user: string | null };
+	identity: {
+		soul: string | null;
+		identity: string | null;
+		user: string | null;
+	};
 }) {
 	const hasContent = identity.soul || identity.identity || identity.user;
 	if (!hasContent) return null;
@@ -631,14 +806,19 @@ function IdentitySection({
 		{ label: "SOUL.md", content: identity.soul },
 		{ label: "IDENTITY.md", content: identity.identity },
 		{ label: "USER.md", content: identity.user },
-	].filter((f) => f.content && f.content.trim().length > 0 && !f.content.startsWith("<!--"));
+	].filter(
+		(f) =>
+			f.content && f.content.trim().length > 0 && !f.content.startsWith("<!--"),
+	);
 
 	if (files.length === 0) return null;
 
 	return (
 		<section className="mt-6">
 			<div className="mb-3 flex items-center justify-between">
-				<h3 className="font-plex text-sm font-medium text-ink-dull">Identity</h3>
+				<h3 className="font-plex text-sm font-medium text-ink-dull">
+					Identity
+				</h3>
 				<Link
 					to="/agents/$agentId/config"
 					params={{ agentId }}
@@ -650,7 +830,9 @@ function IdentitySection({
 			<div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
 				{files.map(({ label, content }) => (
 					<div key={label} className="rounded-xl bg-app-darkBox p-4">
-						<span className="text-tiny font-medium text-ink-faint">{label}</span>
+						<span className="text-tiny font-medium text-ink-faint">
+							{label}
+						</span>
 						<p className="mt-2 line-clamp-4 whitespace-pre-wrap text-sm leading-relaxed text-ink-dull">
 							{content!.trim()}
 						</p>
@@ -661,11 +843,19 @@ function IdentitySection({
 	);
 }
 
-function CronSection({ agentId, jobs }: { agentId: string; jobs: CronJobInfo[] }) {
+function CronSection({
+	agentId,
+	jobs,
+}: {
+	agentId: string;
+	jobs: CronJobInfo[];
+}) {
 	return (
 		<section className="mt-6">
 			<div className="mb-3 flex items-center justify-between">
-				<h3 className="font-plex text-sm font-medium text-ink-dull">Cron Jobs</h3>
+				<h3 className="font-plex text-sm font-medium text-ink-dull">
+					Cron Jobs
+				</h3>
 				<Link
 					to="/agents/$agentId/cron"
 					params={{ agentId }}
@@ -684,7 +874,10 @@ function CronSection({ agentId, jobs }: { agentId: string; jobs: CronJobInfo[] }
 							className={`h-2 w-2 rounded-full ${job.enabled ? "bg-green-500" : "bg-gray-500"}`}
 							title={job.enabled ? "Enabled" : "Disabled"}
 						/>
-						<span className="min-w-0 flex-1 truncate text-sm text-ink-dull" title={job.prompt}>
+						<span
+							className="min-w-0 flex-1 truncate text-sm text-ink-dull"
+							title={job.prompt}
+						>
 							{job.prompt}
 						</span>
 						<span className="text-tiny tabular-nums text-ink-faint">
@@ -695,7 +888,9 @@ function CronSection({ agentId, jobs }: { agentId: string; jobs: CronJobInfo[] }
 								{job.active_hours[0]}:00–{job.active_hours[1]}:00
 							</span>
 						)}
-						<span className="text-tiny text-ink-faint">{job.delivery_target}</span>
+						<span className="text-tiny text-ink-faint">
+							{job.delivery_target}
+						</span>
 					</div>
 				))}
 			</div>
@@ -731,7 +926,9 @@ function CortexEventsSection({
 	return (
 		<section className="mt-6">
 			<div className="mb-3 flex items-center justify-between">
-				<h3 className="font-plex text-sm font-medium text-ink-dull">Recent Cortex Events</h3>
+				<h3 className="font-plex text-sm font-medium text-ink-dull">
+					Recent Cortex Events
+				</h3>
 				<div className="flex items-center gap-4">
 					{lastBulletinAt && (
 						<span className="text-tiny text-ink-faint">
@@ -752,7 +949,9 @@ function CortexEventsSection({
 					{events.map((event) => (
 						<div key={event.id} className="flex items-center gap-3 text-sm">
 							<CortexEventBadge type={event.event_type} />
-							<span className="min-w-0 flex-1 truncate text-ink-dull">{event.summary}</span>
+							<span className="min-w-0 flex-1 truncate text-ink-dull">
+								{event.summary}
+							</span>
 							<span className="flex-shrink-0 text-tiny tabular-nums text-ink-faint">
 								{formatTimeAgo(event.created_at)}
 							</span>

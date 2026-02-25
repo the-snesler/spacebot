@@ -24,7 +24,7 @@ export function ToggleGroup<T extends string>({
 		<div
 			className={cx(
 				"flex overflow-hidden rounded-md border border-app-line bg-app-darkBox",
-				className
+				className,
 			)}
 		>
 			{options.map((option, i) => {
@@ -39,7 +39,7 @@ export function ToggleGroup<T extends string>({
 							"inline-flex h-8 w-8 items-center justify-center transition-colors",
 							isActive
 								? "bg-app-selected text-ink"
-								: "text-ink-faint hover:bg-app-hover/40 hover:text-ink-dull"
+								: "text-ink-faint hover:bg-app-hover/40 hover:text-ink-dull",
 						)}
 					>
 						{option.label}

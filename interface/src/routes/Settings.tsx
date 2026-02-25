@@ -1,9 +1,28 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, type GlobalSettingsResponse } from "@/api/client";
-import { Button, Input, SettingSidebarButton, Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, Select, SelectTrigger, SelectValue, SelectContent, SelectItem, Toggle } from "@/ui";
+import {
+	Button,
+	Input,
+	SettingSidebarButton,
+	Dialog,
+	DialogContent,
+	DialogHeader,
+	DialogTitle,
+	DialogDescription,
+	DialogFooter,
+	Select,
+	SelectTrigger,
+	SelectValue,
+	SelectContent,
+	SelectItem,
+	Toggle,
+} from "@/ui";
 import { useSearch, useNavigate } from "@tanstack/react-router";
-import { ChannelSettingCard, DisabledChannelCard } from "@/components/ChannelSettingCard";
+import {
+	ChannelSettingCard,
+	DisabledChannelCard,
+} from "@/components/ChannelSettingCard";
 import { ModelSelect } from "@/components/ModelSelect";
 import { ProviderIcon } from "@/lib/providerIcons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -11,7 +30,14 @@ import { faSearch } from "@fortawesome/free-solid-svg-icons";
 
 import { parse as parseToml } from "smol-toml";
 
-type SectionId = "providers" | "channels" | "api-keys" | "server" | "opencode" | "worker-logs" | "config-file";
+type SectionId =
+	| "providers"
+	| "channels"
+	| "api-keys"
+	| "server"
+	| "opencode"
+	| "worker-logs"
+	| "config-file";
 
 const SECTIONS = [
 	{
@@ -220,7 +246,7 @@ export function Settings() {
 
 	// Sync activeSection with URL search param
 	useEffect(() => {
-		if (search.tab && SECTIONS.some(s => s.id === search.tab)) {
+		if (search.tab && SECTIONS.some((s) => s.id === search.tab)) {
 			setActiveSection(search.tab as SectionId);
 		}
 	}, [search.tab]);
@@ -238,7 +264,8 @@ export function Settings() {
 		message: string;
 		sample?: string | null;
 	} | null>(null);
-	const [isPollingOpenAiBrowserOAuth, setIsPollingOpenAiBrowserOAuth] = useState(false);
+	const [isPollingOpenAiBrowserOAuth, setIsPollingOpenAiBrowserOAuth] =
+		useState(false);
 	const [openAiBrowserOAuthMessage, setOpenAiBrowserOAuthMessage] = useState<{
 		text: string;
 		type: "success" | "error";
@@ -267,12 +294,23 @@ export function Settings() {
 		queryKey: ["global-settings"],
 		queryFn: api.globalSettings,
 		staleTime: 5_000,
-		enabled: activeSection === "api-keys" || activeSection === "server" || activeSection === "opencode" || activeSection === "worker-logs",
+		enabled:
+			activeSection === "api-keys" ||
+			activeSection === "server" ||
+			activeSection === "opencode" ||
+			activeSection === "worker-logs",
 	});
 
 	const updateMutation = useMutation({
-		mutationFn: ({ provider, apiKey, model }: { provider: string; apiKey: string; model: string }) =>
-			api.updateProvider(provider, apiKey, model),
+		mutationFn: ({
+			provider,
+			apiKey,
+			model,
+		}: {
+			provider: string;
+			apiKey: string;
+			model: string;
+		}) => api.updateProvider(provider, apiKey, model),
 		onSuccess: (result) => {
 			if (result.success) {
 				setEditingProvider(null);
@@ -297,11 +335,19 @@ export function Settings() {
 	});
 
 	const testModelMutation = useMutation({
-		mutationFn: ({ provider, apiKey, model }: { provider: string; apiKey: string; model: string }) =>
-			api.testProviderModel(provider, apiKey, model),
+		mutationFn: ({
+			provider,
+			apiKey,
+			model,
+		}: {
+			provider: string;
+			apiKey: string;
+			model: string;
+		}) => api.testProviderModel(provider, apiKey, model),
 	});
 	const startOpenAiBrowserOAuthMutation = useMutation({
-		mutationFn: (params: { model: string }) => api.startOpenAiOAuthBrowser(params),
+		mutationFn: (params: { model: string }) =>
+			api.startOpenAiOAuthBrowser(params),
 	});
 
 	const removeMutation = useMutation({
@@ -327,7 +373,8 @@ export function Settings() {
 	const oauthAbortRef = useRef<AbortController | null>(null);
 
 	const handleTestModel = async (): Promise<boolean> => {
-		if (!editingProvider || !keyInput.trim() || !modelInput.trim()) return false;
+		if (!editingProvider || !keyInput.trim() || !modelInput.trim())
+			return false;
 		setMessage(null);
 		setTestResult(null);
 		try {
@@ -336,7 +383,11 @@ export function Settings() {
 				apiKey: keyInput.trim(),
 				model: modelInput.trim(),
 			});
-			setTestResult({ success: result.success, message: result.message, sample: result.sample });
+			setTestResult({
+				success: result.success,
+				message: result.message,
+				sample: result.sample,
+			});
 			if (result.success) {
 				setTestedSignature(currentSignature);
 				return true;
@@ -366,7 +417,10 @@ export function Settings() {
 		});
 	};
 
-	const monitorOpenAiBrowserOAuth = async (stateToken: string, signal: AbortSignal) => {
+	const monitorOpenAiBrowserOAuth = async (
+		stateToken: string,
+		signal: AbortSignal,
+	) => {
 		setIsPollingOpenAiBrowserOAuth(true);
 		setOpenAiBrowserOAuthMessage(null);
 		try {
@@ -382,10 +436,10 @@ export function Settings() {
 							text: status.message || "ChatGPT OAuth configured.",
 							type: "success",
 						});
-						queryClient.invalidateQueries({queryKey: ["providers"]});
+						queryClient.invalidateQueries({ queryKey: ["providers"] });
 						setTimeout(() => {
-							queryClient.invalidateQueries({queryKey: ["agents"]});
-							queryClient.invalidateQueries({queryKey: ["overview"]});
+							queryClient.invalidateQueries({ queryKey: ["agents"] });
+							queryClient.invalidateQueries({ queryKey: ["overview"] });
 						}, 3000);
 					} else {
 						setOpenAiBrowserOAuthMessage({
@@ -435,7 +489,12 @@ export function Settings() {
 			const result = await startOpenAiBrowserOAuthMutation.mutateAsync({
 				model: CHATGPT_OAUTH_DEFAULT_MODEL,
 			});
-			if (!result.success || !result.user_code || !result.verification_url || !result.state) {
+			if (
+				!result.success ||
+				!result.user_code ||
+				!result.verification_url ||
+				!result.state
+			) {
 				setOpenAiBrowserOAuthMessage({
 					text: result.message || "Failed to start device sign-in",
 					type: "error",
@@ -453,7 +512,10 @@ export function Settings() {
 			});
 			void monitorOpenAiBrowserOAuth(result.state, abort.signal);
 		} catch (error: any) {
-			setOpenAiBrowserOAuthMessage({text: `Failed: ${error.message}`, type: "error"});
+			setOpenAiBrowserOAuthMessage({
+				text: `Failed: ${error.message}`,
+				type: "error",
+			});
 		}
 	};
 
@@ -518,7 +580,10 @@ export function Settings() {
 
 	const isConfigured = (providerId: string): boolean => {
 		if (!data) return false;
-		const statusKey = providerId.replace(/-/g, "_") as keyof typeof data.providers;
+		const statusKey = providerId.replace(
+			/-/g,
+			"_",
+		) as keyof typeof data.providers;
 		return data.providers[statusKey] ?? false;
 	};
 
@@ -560,15 +625,16 @@ export function Settings() {
 									LLM Providers
 								</h2>
 								<p className="mt-1 text-sm text-ink-dull">
-									Configure credentials/endpoints for LLM providers. At least one provider is
-									required for agents to function.
+									Configure credentials/endpoints for LLM providers. At least
+									one provider is required for agents to function.
 								</p>
 							</div>
 
 							<div className="mb-4 rounded-md border border-app-line bg-app-darkBox/20 px-4 py-3">
 								<p className="text-sm text-ink-faint">
-									When you add a provider, choose a model and run a completion test before saving.
-									Saving applies that model to all five default routing roles and to your default agent.
+									When you add a provider, choose a model and run a completion
+									test before saving. Saving applies that model to all five
+									default routing roles and to your default agent.
 								</p>
 							</div>
 
@@ -579,43 +645,41 @@ export function Settings() {
 								</div>
 							) : (
 								<div className="flex flex-col gap-3">
-									{PROVIDERS.map((provider) => (
-										[
+									{PROVIDERS.map((provider) => [
+										<ProviderCard
+											key={provider.id}
+											provider={provider.id}
+											name={provider.name}
+											description={provider.description}
+											configured={isConfigured(provider.id)}
+											defaultModel={provider.defaultModel}
+											onEdit={() => {
+												setEditingProvider(provider.id);
+												setKeyInput("");
+												setModelInput(provider.defaultModel ?? "");
+												setTestedSignature(null);
+												setTestResult(null);
+												setMessage(null);
+											}}
+											onRemove={() => removeMutation.mutate(provider.id)}
+											removing={removeMutation.isPending}
+										/>,
+										provider.id === "openai" ? (
 											<ProviderCard
-												key={provider.id}
-												provider={provider.id}
-												name={provider.name}
-												description={provider.description}
-												configured={isConfigured(provider.id)}
-												defaultModel={provider.defaultModel}
-												onEdit={() => {
-													setEditingProvider(provider.id);
-													setKeyInput("");
-													setModelInput(provider.defaultModel ?? "");
-													setTestedSignature(null);
-													setTestResult(null);
-													setMessage(null);
-												}}
-												onRemove={() => removeMutation.mutate(provider.id)}
+												key="openai-chatgpt"
+												provider="openai-chatgpt"
+												name="ChatGPT Plus (OAuth)"
+												description="Sign in with your ChatGPT Plus account using a device code."
+												configured={isConfigured("openai-chatgpt")}
+												defaultModel={CHATGPT_OAUTH_DEFAULT_MODEL}
+												onEdit={() => setOpenAiOAuthDialogOpen(true)}
+												onRemove={() => removeMutation.mutate("openai-chatgpt")}
 												removing={removeMutation.isPending}
-											/>,
-											provider.id === "openai" ? (
-												<ProviderCard
-													key="openai-chatgpt"
-													provider="openai-chatgpt"
-													name="ChatGPT Plus (OAuth)"
-													description="Sign in with your ChatGPT Plus account using a device code."
-													configured={isConfigured("openai-chatgpt")}
-													defaultModel={CHATGPT_OAUTH_DEFAULT_MODEL}
-													onEdit={() => setOpenAiOAuthDialogOpen(true)}
-													onRemove={() => removeMutation.mutate("openai-chatgpt")}
-													removing={removeMutation.isPending}
-													actionLabel="Sign in"
-													showRemove={isConfigured("openai-chatgpt")}
-												/>
-											) : null,
-										]
-									))}
+												actionLabel="Sign in"
+												showRemove={isConfigured("openai-chatgpt")}
+											/>
+										) : null,
+									])}
 								</div>
 							)}
 
@@ -651,20 +715,37 @@ export function Settings() {
 					) : activeSection === "channels" ? (
 						<ChannelsSection />
 					) : activeSection === "api-keys" ? (
-						<ApiKeysSection settings={globalSettings} isLoading={globalSettingsLoading} />
+						<ApiKeysSection
+							settings={globalSettings}
+							isLoading={globalSettingsLoading}
+						/>
 					) : activeSection === "server" ? (
-						<ServerSection settings={globalSettings} isLoading={globalSettingsLoading} />
+						<ServerSection
+							settings={globalSettings}
+							isLoading={globalSettingsLoading}
+						/>
 					) : activeSection === "opencode" ? (
-						<OpenCodeSection settings={globalSettings} isLoading={globalSettingsLoading} />
+						<OpenCodeSection
+							settings={globalSettings}
+							isLoading={globalSettingsLoading}
+						/>
 					) : activeSection === "worker-logs" ? (
-						<WorkerLogsSection settings={globalSettings} isLoading={globalSettingsLoading} />
+						<WorkerLogsSection
+							settings={globalSettings}
+							isLoading={globalSettingsLoading}
+						/>
 					) : activeSection === "config-file" ? (
 						<ConfigFileSection />
 					) : null}
 				</div>
 			</div>
 
-			<Dialog open={!!editingProvider} onOpenChange={(open) => { if (!open) handleClose(); }}>
+			<Dialog
+				open={!!editingProvider}
+				onOpenChange={(open) => {
+					if (!open) handleClose();
+				}}
+			>
 				<DialogContent className="max-w-md">
 					<DialogHeader>
 						<DialogTitle>
@@ -676,7 +757,7 @@ export function Settings() {
 								? `Enter your ${editingProviderData?.name} base URL. It will be saved to your instance config.`
 								: editingProvider === "openai"
 									? "Enter an OpenAI API key. The model below will be applied to routing."
-								: `Enter your ${editingProviderData?.name} API key. It will be saved to your instance config.`}
+									: `Enter your ${editingProviderData?.name} API key. It will be saved to your instance config.`}
 						</DialogDescription>
 					</DialogHeader>
 					<Input
@@ -705,7 +786,9 @@ export function Settings() {
 					<div className="flex items-center gap-2">
 						<Button
 							onClick={handleTestModel}
-							disabled={!editingProvider || !keyInput.trim() || !modelInput.trim()}
+							disabled={
+								!editingProvider || !keyInput.trim() || !modelInput.trim()
+							}
 							loading={testModelMutation.isPending}
 							variant="outline"
 							size="sm"
@@ -718,23 +801,27 @@ export function Settings() {
 					</div>
 					{testResult && (
 						<div
-							className={`rounded-md border px-3 py-2 text-sm ${testResult.success
+							className={`rounded-md border px-3 py-2 text-sm ${
+								testResult.success
 									? "border-green-500/20 bg-green-500/10 text-green-400"
 									: "border-red-500/20 bg-red-500/10 text-red-400"
-								}`}
+							}`}
 						>
 							<div>{testResult.message}</div>
 							{testResult.success && testResult.sample ? (
-								<div className="mt-1 text-xs text-ink-dull">Sample: {testResult.sample}</div>
+								<div className="mt-1 text-xs text-ink-dull">
+									Sample: {testResult.sample}
+								</div>
 							) : null}
 						</div>
 					)}
 					{message && (
 						<div
-							className={`rounded-md border px-3 py-2 text-sm ${message.type === "success"
+							className={`rounded-md border px-3 py-2 text-sm ${
+								message.type === "success"
 									? "border-green-500/20 bg-green-500/10 text-green-400"
 									: "border-red-500/20 bg-red-500/10 text-red-400"
-								}`}
+							}`}
 						>
 							{message.text}
 						</div>
@@ -768,29 +855,76 @@ function ChannelsSection() {
 	});
 
 	const PLATFORMS = [
-		{ platform: "discord" as const, name: "Discord", description: "Discord bot integration" },
-		{ platform: "slack" as const, name: "Slack", description: "Slack bot integration" },
-		{ platform: "telegram" as const, name: "Telegram", description: "Telegram bot integration" },
-		{ platform: "twitch" as const, name: "Twitch", description: "Twitch chat integration" },
-		{ platform: "webhook" as const, name: "Webhook", description: "HTTP webhook receiver" },
+		{
+			platform: "discord" as const,
+			name: "Discord",
+			description: "Discord bot integration",
+		},
+		{
+			platform: "slack" as const,
+			name: "Slack",
+			description: "Slack bot integration",
+		},
+		{
+			platform: "telegram" as const,
+			name: "Telegram",
+			description: "Telegram bot integration",
+		},
+		{
+			platform: "twitch" as const,
+			name: "Twitch",
+			description: "Twitch chat integration",
+		},
+		{
+			platform: "webhook" as const,
+			name: "Webhook",
+			description: "HTTP webhook receiver",
+		},
 	] as const;
 
 	const COMING_SOON = [
-		{ platform: "email", name: "Email", description: "IMAP polling for inbound, SMTP for outbound" },
-		{ platform: "whatsapp", name: "WhatsApp", description: "Meta Cloud API integration" },
-		{ platform: "matrix", name: "Matrix", description: "Decentralized chat protocol" },
-		{ platform: "imessage", name: "iMessage", description: "macOS-only AppleScript bridge" },
+		{
+			platform: "email",
+			name: "Email",
+			description: "IMAP polling for inbound, SMTP for outbound",
+		},
+		{
+			platform: "whatsapp",
+			name: "WhatsApp",
+			description: "Meta Cloud API integration",
+		},
+		{
+			platform: "matrix",
+			name: "Matrix",
+			description: "Decentralized chat protocol",
+		},
+		{
+			platform: "imessage",
+			name: "iMessage",
+			description: "macOS-only AppleScript bridge",
+		},
 		{ platform: "irc", name: "IRC", description: "TLS socket connection" },
-		{ platform: "lark", name: "Lark", description: "Feishu/Lark webhook integration" },
-		{ platform: "dingtalk", name: "DingTalk", description: "Chinese enterprise webhook integration" },
+		{
+			platform: "lark",
+			name: "Lark",
+			description: "Feishu/Lark webhook integration",
+		},
+		{
+			platform: "dingtalk",
+			name: "DingTalk",
+			description: "Chinese enterprise webhook integration",
+		},
 	];
 
 	return (
 		<div className="mx-auto max-w-2xl px-6 py-6">
 			<div className="mb-6">
-				<h2 className="font-plex text-sm font-semibold text-ink">Messaging Platforms</h2>
+				<h2 className="font-plex text-sm font-semibold text-ink">
+					Messaging Platforms
+				</h2>
 				<p className="mt-1 text-sm text-ink-dull">
-					Connect messaging platforms and configure how conversations route to agents.
+					Connect messaging platforms and configure how conversations route to
+					agents.
 				</p>
 			</div>
 
@@ -809,19 +943,24 @@ function ChannelsSection() {
 							description={d}
 							status={messagingStatus?.[p]}
 							expanded={expandedPlatform === p}
-							onToggle={() => setExpandedPlatform(expandedPlatform === p ? null : p)}
+							onToggle={() =>
+								setExpandedPlatform(expandedPlatform === p ? null : p)
+							}
 						/>
 					))}
 					{COMING_SOON.map(({ platform: p, name: n, description: d }) => (
-						<DisabledChannelCard key={p} platform={p} name={n} description={d} />
+						<DisabledChannelCard
+							key={p}
+							platform={p}
+							name={n}
+							description={d}
+						/>
 					))}
 				</div>
 			)}
 		</div>
 	);
 }
-
-
 
 interface GlobalSettingsSectionProps {
 	settings: GlobalSettingsResponse | undefined;
@@ -832,7 +971,10 @@ function ApiKeysSection({ settings, isLoading }: GlobalSettingsSectionProps) {
 	const queryClient = useQueryClient();
 	const [editingBraveKey, setEditingBraveKey] = useState(false);
 	const [braveKeyInput, setBraveKeyInput] = useState("");
-	const [message, setMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
+	const [message, setMessage] = useState<{
+		text: string;
+		type: "success" | "error";
+	} | null>(null);
 
 	const updateMutation = useMutation({
 		mutationFn: api.updateGlobalSettings,
@@ -862,7 +1004,9 @@ function ApiKeysSection({ settings, isLoading }: GlobalSettingsSectionProps) {
 	return (
 		<div className="mx-auto max-w-2xl px-6 py-6">
 			<div className="mb-6">
-				<h2 className="font-plex text-sm font-semibold text-ink">Third-Party API Keys</h2>
+				<h2 className="font-plex text-sm font-semibold text-ink">
+					Third-Party API Keys
+				</h2>
 				<p className="mt-1 text-sm text-ink-dull">
 					Configure API keys for third-party services used by workers.
 				</p>
@@ -880,9 +1024,13 @@ function ApiKeysSection({ settings, isLoading }: GlobalSettingsSectionProps) {
 							<FontAwesomeIcon icon={faSearch} className="text-ink-faint" />
 							<div className="flex-1">
 								<div className="flex items-center gap-2">
-									<span className="text-sm font-medium text-ink">Brave Search</span>
+									<span className="text-sm font-medium text-ink">
+										Brave Search
+									</span>
 									{settings?.brave_search_key && (
-										<span className="text-tiny text-green-400">● Configured</span>
+										<span className="text-tiny text-green-400">
+											● Configured
+										</span>
 									)}
 								</div>
 								<p className="mt-0.5 text-sm text-ink-dull">
@@ -919,19 +1067,27 @@ function ApiKeysSection({ settings, isLoading }: GlobalSettingsSectionProps) {
 
 			{message && (
 				<div
-					className={`mt-4 rounded-md border px-3 py-2 text-sm ${message.type === "success"
+					className={`mt-4 rounded-md border px-3 py-2 text-sm ${
+						message.type === "success"
 							? "border-green-500/20 bg-green-500/10 text-green-400"
 							: "border-red-500/20 bg-red-500/10 text-red-400"
-						}`}
+					}`}
 				>
 					{message.text}
 				</div>
 			)}
 
-			<Dialog open={editingBraveKey} onOpenChange={(open) => { if (!open) setEditingBraveKey(false); }}>
+			<Dialog
+				open={editingBraveKey}
+				onOpenChange={(open) => {
+					if (!open) setEditingBraveKey(false);
+				}}
+			>
 				<DialogContent className="max-w-md">
 					<DialogHeader>
-						<DialogTitle>{settings?.brave_search_key ? "Update" : "Add"} Brave Search Key</DialogTitle>
+						<DialogTitle>
+							{settings?.brave_search_key ? "Update" : "Add"} Brave Search Key
+						</DialogTitle>
 						<DialogDescription>
 							Enter your Brave Search API key. Get one at brave.com/search/api
 						</DialogDescription>
@@ -947,7 +1103,11 @@ function ApiKeysSection({ settings, isLoading }: GlobalSettingsSectionProps) {
 						}}
 					/>
 					<DialogFooter>
-						<Button onClick={() => setEditingBraveKey(false)} variant="ghost" size="sm">
+						<Button
+							onClick={() => setEditingBraveKey(false)}
+							variant="ghost"
+							size="sm"
+						>
 							Cancel
 						</Button>
 						<Button
@@ -968,9 +1128,15 @@ function ApiKeysSection({ settings, isLoading }: GlobalSettingsSectionProps) {
 function ServerSection({ settings, isLoading }: GlobalSettingsSectionProps) {
 	const queryClient = useQueryClient();
 	const [apiEnabled, setApiEnabled] = useState(settings?.api_enabled ?? true);
-	const [apiPort, setApiPort] = useState(settings?.api_port.toString() ?? "19898");
+	const [apiPort, setApiPort] = useState(
+		settings?.api_port.toString() ?? "19898",
+	);
 	const [apiBind, setApiBind] = useState(settings?.api_bind ?? "127.0.0.1");
-	const [message, setMessage] = useState<{ text: string; type: "success" | "error"; requiresRestart?: boolean } | null>(null);
+	const [message, setMessage] = useState<{
+		text: string;
+		type: "success" | "error";
+		requiresRestart?: boolean;
+	} | null>(null);
 
 	// Update form state when settings load
 	useEffect(() => {
@@ -985,7 +1151,11 @@ function ServerSection({ settings, isLoading }: GlobalSettingsSectionProps) {
 		mutationFn: api.updateGlobalSettings,
 		onSuccess: (result) => {
 			if (result.success) {
-				setMessage({ text: result.message, type: "success", requiresRestart: result.requires_restart });
+				setMessage({
+					text: result.message,
+					type: "success",
+					requiresRestart: result.requires_restart,
+				});
 				queryClient.invalidateQueries({ queryKey: ["global-settings"] });
 			} else {
 				setMessage({ text: result.message, type: "error" });
@@ -999,7 +1169,10 @@ function ServerSection({ settings, isLoading }: GlobalSettingsSectionProps) {
 	const handleSave = () => {
 		const port = parseInt(apiPort, 10);
 		if (isNaN(port) || port < 1024 || port > 65535) {
-			setMessage({ text: "Port must be between 1024 and 65535", type: "error" });
+			setMessage({
+				text: "Port must be between 1024 and 65535",
+				type: "error",
+			});
 			return;
 		}
 
@@ -1013,9 +1186,12 @@ function ServerSection({ settings, isLoading }: GlobalSettingsSectionProps) {
 	return (
 		<div className="mx-auto max-w-2xl px-6 py-6">
 			<div className="mb-6">
-				<h2 className="font-plex text-sm font-semibold text-ink">API Server Configuration</h2>
+				<h2 className="font-plex text-sm font-semibold text-ink">
+					API Server Configuration
+				</h2>
 				<p className="mt-1 text-sm text-ink-dull">
-					Configure the HTTP API server. Changes require a restart to take effect.
+					Configure the HTTP API server. Changes require a restart to take
+					effect.
 				</p>
 			</div>
 
@@ -1029,7 +1205,9 @@ function ServerSection({ settings, isLoading }: GlobalSettingsSectionProps) {
 					<div className="rounded-lg border border-app-line bg-app-box p-4">
 						<div className="flex items-center justify-between">
 							<div>
-								<span className="text-sm font-medium text-ink">Enable API Server</span>
+								<span className="text-sm font-medium text-ink">
+									Enable API Server
+								</span>
 								<p className="mt-0.5 text-sm text-ink-dull">
 									Disable to prevent the HTTP API from starting
 								</p>
@@ -1045,7 +1223,9 @@ function ServerSection({ settings, isLoading }: GlobalSettingsSectionProps) {
 					<div className="rounded-lg border border-app-line bg-app-box p-4">
 						<label className="block">
 							<span className="text-sm font-medium text-ink">Port</span>
-							<p className="mt-0.5 text-sm text-ink-dull">Port number for the API server</p>
+							<p className="mt-0.5 text-sm text-ink-dull">
+								Port number for the API server
+							</p>
 							<Input
 								type="number"
 								value={apiPort}
@@ -1061,7 +1241,8 @@ function ServerSection({ settings, isLoading }: GlobalSettingsSectionProps) {
 						<label className="block">
 							<span className="text-sm font-medium text-ink">Bind Address</span>
 							<p className="mt-0.5 text-sm text-ink-dull">
-								IP address to bind to (127.0.0.1 for local, 0.0.0.0 for all interfaces)
+								IP address to bind to (127.0.0.1 for local, 0.0.0.0 for all
+								interfaces)
 							</p>
 							<Input
 								type="text"
@@ -1081,10 +1262,11 @@ function ServerSection({ settings, isLoading }: GlobalSettingsSectionProps) {
 
 			{message && (
 				<div
-					className={`mt-4 rounded-md border px-3 py-2 text-sm ${message.type === "success"
+					className={`mt-4 rounded-md border px-3 py-2 text-sm ${
+						message.type === "success"
 							? "border-green-500/20 bg-green-500/10 text-green-400"
 							: "border-red-500/20 bg-red-500/10 text-red-400"
-						}`}
+					}`}
 				>
 					{message.text}
 					{message.requiresRestart && (
@@ -1098,10 +1280,18 @@ function ServerSection({ settings, isLoading }: GlobalSettingsSectionProps) {
 	);
 }
 
-function WorkerLogsSection({ settings, isLoading }: GlobalSettingsSectionProps) {
+function WorkerLogsSection({
+	settings,
+	isLoading,
+}: GlobalSettingsSectionProps) {
 	const queryClient = useQueryClient();
-	const [logMode, setLogMode] = useState(settings?.worker_log_mode ?? "errors_only");
-	const [message, setMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
+	const [logMode, setLogMode] = useState(
+		settings?.worker_log_mode ?? "errors_only",
+	);
+	const [message, setMessage] = useState<{
+		text: string;
+		type: "success" | "error";
+	} | null>(null);
 
 	// Update form state when settings load
 	useEffect(() => {
@@ -1150,7 +1340,9 @@ function WorkerLogsSection({ settings, isLoading }: GlobalSettingsSectionProps) 
 	return (
 		<div className="mx-auto max-w-2xl px-6 py-6">
 			<div className="mb-6">
-				<h2 className="font-plex text-sm font-semibold text-ink">Worker Execution Logs</h2>
+				<h2 className="font-plex text-sm font-semibold text-ink">
+					Worker Execution Logs
+				</h2>
 				<p className="mt-1 text-sm text-ink-dull">
 					Control how worker execution logs are stored in the logs directory.
 				</p>
@@ -1167,10 +1359,11 @@ function WorkerLogsSection({ settings, isLoading }: GlobalSettingsSectionProps) 
 						{modes.map((mode) => (
 							<div
 								key={mode.value}
-								className={`rounded-lg border p-4 cursor-pointer transition-colors ${logMode === mode.value
+								className={`rounded-lg border p-4 cursor-pointer transition-colors ${
+									logMode === mode.value
 										? "border-accent bg-accent/5"
 										: "border-app-line bg-app-box hover:border-app-line/80"
-									}`}
+								}`}
 								onClick={() => setLogMode(mode.value)}
 							>
 								<label className="flex items-start gap-3 cursor-pointer">
@@ -1182,8 +1375,12 @@ function WorkerLogsSection({ settings, isLoading }: GlobalSettingsSectionProps) 
 										className="mt-0.5"
 									/>
 									<div className="flex-1">
-										<span className="text-sm font-medium text-ink">{mode.label}</span>
-										<p className="mt-0.5 text-sm text-ink-dull">{mode.description}</p>
+										<span className="text-sm font-medium text-ink">
+											{mode.label}
+										</span>
+										<p className="mt-0.5 text-sm text-ink-dull">
+											{mode.description}
+										</p>
 									</div>
 								</label>
 							</div>
@@ -1198,10 +1395,11 @@ function WorkerLogsSection({ settings, isLoading }: GlobalSettingsSectionProps) 
 
 			{message && (
 				<div
-					className={`mt-4 rounded-md border px-3 py-2 text-sm ${message.type === "success"
+					className={`mt-4 rounded-md border px-3 py-2 text-sm ${
+						message.type === "success"
 							? "border-green-500/20 bg-green-500/10 text-green-400"
 							: "border-red-500/20 bg-red-500/10 text-red-400"
-						}`}
+					}`}
 				>
 					{message.text}
 				</div>
@@ -1211,7 +1409,11 @@ function WorkerLogsSection({ settings, isLoading }: GlobalSettingsSectionProps) 
 }
 
 const PERMISSION_OPTIONS = [
-	{ value: "allow", label: "Allow", description: "Tool can run without restriction" },
+	{
+		value: "allow",
+		label: "Allow",
+		description: "Tool can run without restriction",
+	},
 	{ value: "deny", label: "Deny", description: "Tool is completely disabled" },
 ];
 
@@ -1219,20 +1421,37 @@ function OpenCodeSection({ settings, isLoading }: GlobalSettingsSectionProps) {
 	const queryClient = useQueryClient();
 	const [enabled, setEnabled] = useState(settings?.opencode?.enabled ?? false);
 	const [path, setPath] = useState(settings?.opencode?.path ?? "opencode");
-	const [maxServers, setMaxServers] = useState(settings?.opencode?.max_servers?.toString() ?? "5");
-	const [startupTimeout, setStartupTimeout] = useState(settings?.opencode?.server_startup_timeout_secs?.toString() ?? "30");
-	const [maxRetries, setMaxRetries] = useState(settings?.opencode?.max_restart_retries?.toString() ?? "5");
-	const [editPerm, setEditPerm] = useState(settings?.opencode?.permissions?.edit ?? "allow");
-	const [bashPerm, setBashPerm] = useState(settings?.opencode?.permissions?.bash ?? "allow");
-	const [webfetchPerm, setWebfetchPerm] = useState(settings?.opencode?.permissions?.webfetch ?? "allow");
-	const [message, setMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
+	const [maxServers, setMaxServers] = useState(
+		settings?.opencode?.max_servers?.toString() ?? "5",
+	);
+	const [startupTimeout, setStartupTimeout] = useState(
+		settings?.opencode?.server_startup_timeout_secs?.toString() ?? "30",
+	);
+	const [maxRetries, setMaxRetries] = useState(
+		settings?.opencode?.max_restart_retries?.toString() ?? "5",
+	);
+	const [editPerm, setEditPerm] = useState(
+		settings?.opencode?.permissions?.edit ?? "allow",
+	);
+	const [bashPerm, setBashPerm] = useState(
+		settings?.opencode?.permissions?.bash ?? "allow",
+	);
+	const [webfetchPerm, setWebfetchPerm] = useState(
+		settings?.opencode?.permissions?.webfetch ?? "allow",
+	);
+	const [message, setMessage] = useState<{
+		text: string;
+		type: "success" | "error";
+	} | null>(null);
 
 	useEffect(() => {
 		if (settings?.opencode) {
 			setEnabled(settings.opencode.enabled);
 			setPath(settings.opencode.path);
 			setMaxServers(settings.opencode.max_servers.toString());
-			setStartupTimeout(settings.opencode.server_startup_timeout_secs.toString());
+			setStartupTimeout(
+				settings.opencode.server_startup_timeout_secs.toString(),
+			);
 			setMaxRetries(settings.opencode.max_restart_retries.toString());
 			setEditPerm(settings.opencode.permissions.edit);
 			setBashPerm(settings.opencode.permissions.bash);
@@ -1291,9 +1510,24 @@ function OpenCodeSection({ settings, isLoading }: GlobalSettingsSectionProps) {
 	return (
 		<div className="mx-auto max-w-2xl px-6 py-6">
 			<div className="mb-6">
-				<h2 className="font-plex text-sm font-semibold text-ink">OpenCode Workers</h2>
+				<h2 className="font-plex text-sm font-semibold text-ink">
+					OpenCode Workers
+				</h2>
 				<p className="mt-1 text-sm text-ink-dull">
-					Spawn <a href="https://opencode.ai" target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">OpenCode</a> coding agents as worker subprocesses. Requires the <code className="rounded bg-app-box px-1 py-0.5 text-tiny text-ink-dull">opencode</code> binary on PATH or a custom path below.
+					Spawn{" "}
+					<a
+						href="https://opencode.ai"
+						target="_blank"
+						rel="noopener noreferrer"
+						className="text-accent hover:underline"
+					>
+						OpenCode
+					</a>{" "}
+					coding agents as worker subprocesses. Requires the{" "}
+					<code className="rounded bg-app-box px-1 py-0.5 text-tiny text-ink-dull">
+						opencode
+					</code>{" "}
+					binary on PATH or a custom path below.
 				</p>
 			</div>
 
@@ -1314,7 +1548,9 @@ function OpenCodeSection({ settings, isLoading }: GlobalSettingsSectionProps) {
 								className="h-4 w-4"
 							/>
 							<div>
-								<span className="text-sm font-medium text-ink">Enable OpenCode Workers</span>
+								<span className="text-sm font-medium text-ink">
+									Enable OpenCode Workers
+								</span>
 								<p className="mt-0.5 text-sm text-ink-dull">
 									Allow agents to spawn OpenCode coding sessions
 								</p>
@@ -1327,9 +1563,12 @@ function OpenCodeSection({ settings, isLoading }: GlobalSettingsSectionProps) {
 							{/* Binary path */}
 							<div className="rounded-lg border border-app-line bg-app-box p-4">
 								<label className="block">
-									<span className="text-sm font-medium text-ink">Binary Path</span>
+									<span className="text-sm font-medium text-ink">
+										Binary Path
+									</span>
 									<p className="mt-0.5 text-sm text-ink-dull">
-										Path to the OpenCode binary, or just the name if it's on PATH
+										Path to the OpenCode binary, or just the name if it's on
+										PATH
 									</p>
 									<Input
 										type="text"
@@ -1343,13 +1582,18 @@ function OpenCodeSection({ settings, isLoading }: GlobalSettingsSectionProps) {
 
 							{/* Pool settings */}
 							<div className="rounded-lg border border-app-line bg-app-box p-4">
-								<span className="text-sm font-medium text-ink">Server Pool</span>
+								<span className="text-sm font-medium text-ink">
+									Server Pool
+								</span>
 								<p className="mt-0.5 text-sm text-ink-dull">
-									Controls how many OpenCode server processes can run concurrently
+									Controls how many OpenCode server processes can run
+									concurrently
 								</p>
 								<div className="mt-3 grid grid-cols-3 gap-3">
 									<label className="block">
-										<span className="text-tiny font-medium text-ink-dull">Max Servers</span>
+										<span className="text-tiny font-medium text-ink-dull">
+											Max Servers
+										</span>
 										<Input
 											type="number"
 											value={maxServers}
@@ -1360,7 +1604,9 @@ function OpenCodeSection({ settings, isLoading }: GlobalSettingsSectionProps) {
 										/>
 									</label>
 									<label className="block">
-										<span className="text-tiny font-medium text-ink-dull">Startup Timeout (s)</span>
+										<span className="text-tiny font-medium text-ink-dull">
+											Startup Timeout (s)
+										</span>
 										<Input
 											type="number"
 											value={startupTimeout}
@@ -1370,7 +1616,9 @@ function OpenCodeSection({ settings, isLoading }: GlobalSettingsSectionProps) {
 										/>
 									</label>
 									<label className="block">
-										<span className="text-tiny font-medium text-ink-dull">Max Retries</span>
+										<span className="text-tiny font-medium text-ink-dull">
+											Max Retries
+										</span>
 										<Input
 											type="number"
 											value={maxRetries}
@@ -1384,17 +1632,36 @@ function OpenCodeSection({ settings, isLoading }: GlobalSettingsSectionProps) {
 
 							{/* Permissions */}
 							<div className="rounded-lg border border-app-line bg-app-box p-4">
-								<span className="text-sm font-medium text-ink">Permissions</span>
+								<span className="text-sm font-medium text-ink">
+									Permissions
+								</span>
 								<p className="mt-0.5 text-sm text-ink-dull">
 									Control which tools OpenCode workers can use
 								</p>
 								<div className="mt-3 flex flex-col gap-3">
-									{([
-										{ label: "File Edit", value: editPerm, setter: setEditPerm },
-										{ label: "Shell / Bash", value: bashPerm, setter: setBashPerm },
-										{ label: "Web Fetch", value: webfetchPerm, setter: setWebfetchPerm },
-									] as const).map(({ label, value, setter }) => (
-										<div key={label} className="flex items-center justify-between">
+									{(
+										[
+											{
+												label: "File Edit",
+												value: editPerm,
+												setter: setEditPerm,
+											},
+											{
+												label: "Shell / Bash",
+												value: bashPerm,
+												setter: setBashPerm,
+											},
+											{
+												label: "Web Fetch",
+												value: webfetchPerm,
+												setter: setWebfetchPerm,
+											},
+										] as const
+									).map(({ label, value, setter }) => (
+										<div
+											key={label}
+											className="flex items-center justify-between"
+										>
 											<span className="text-sm text-ink">{label}</span>
 											<Select value={value} onValueChange={(v) => setter(v)}>
 												<SelectTrigger className="w-28">
@@ -1423,10 +1690,11 @@ function OpenCodeSection({ settings, isLoading }: GlobalSettingsSectionProps) {
 
 			{message && (
 				<div
-					className={`mt-4 rounded-md border px-3 py-2 text-sm ${message.type === "success"
+					className={`mt-4 rounded-md border px-3 py-2 text-sm ${
+						message.type === "success"
 							? "border-green-500/20 bg-green-500/10 text-green-400"
 							: "border-red-500/20 bg-red-500/10 text-red-400"
-						}`}
+					}`}
 				>
 					{message.text}
 				</div>
@@ -1442,7 +1710,10 @@ function ConfigFileSection() {
 	const [originalContent, setOriginalContent] = useState("");
 	const [currentContent, setCurrentContent] = useState("");
 	const [validationError, setValidationError] = useState<string | null>(null);
-	const [message, setMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
+	const [message, setMessage] = useState<{
+		text: string;
+		type: "success" | "error";
+	} | null>(null);
 	const [editorLoaded, setEditorLoaded] = useState(false);
 
 	const { data, isLoading } = useQuery({
@@ -1534,14 +1805,16 @@ function ConfigFileSection() {
 					themeMod.oneDark,
 					theme,
 					updateListener,
-					viewMod.keymap.of([{
-						key: "Mod-s",
-						run: () => {
-							// Trigger save via DOM event since we can't access React state here
-							editorRef.current?.dispatchEvent(new CustomEvent("cm-save"));
-							return true;
+					viewMod.keymap.of([
+						{
+							key: "Mod-s",
+							run: () => {
+								// Trigger save via DOM event since we can't access React state here
+								editorRef.current?.dispatchEvent(new CustomEvent("cm-save"));
+								return true;
+							},
 						},
-					}]),
+					]),
 				],
 			});
 
@@ -1597,7 +1870,8 @@ function ConfigFileSection() {
 			{/* Description + actions */}
 			<div className="flex items-center justify-between px-6 py-4 border-b border-app-line/30">
 				<p className="text-sm text-ink-dull">
-					Edit the raw configuration file. Changes are validated as TOML before saving.
+					Edit the raw configuration file. Changes are validated as TOML before
+					saving.
 				</p>
 				<div className="flex items-center gap-2 flex-shrink-0 ml-4">
 					{isDirty && (
@@ -1618,12 +1892,15 @@ function ConfigFileSection() {
 
 			{/* Validation / status bar */}
 			{(validationError || message) && (
-				<div className={`border-b px-6 py-2 text-sm ${validationError
-						? "border-red-500/20 bg-red-500/5 text-red-400"
-						: message?.type === "success"
-							? "border-green-500/20 bg-green-500/5 text-green-400"
-							: "border-red-500/20 bg-red-500/5 text-red-400"
-					}`}>
+				<div
+					className={`border-b px-6 py-2 text-sm ${
+						validationError
+							? "border-red-500/20 bg-red-500/5 text-red-400"
+							: message?.type === "success"
+								? "border-green-500/20 bg-green-500/5 text-green-400"
+								: "border-red-500/20 bg-red-500/5 text-red-400"
+					}`}
+				>
 					{validationError ? `Syntax error: ${validationError}` : message?.text}
 				</div>
 			)}
@@ -1679,7 +1956,10 @@ function ProviderCard({
 						<span className="text-sm font-medium text-ink">{name}</span>
 						{configured && (
 							<span className="inline-flex items-center">
-								<span className="h-2 w-2 rounded-full bg-green-400" aria-hidden="true" />
+								<span
+									className="h-2 w-2 rounded-full bg-green-400"
+									aria-hidden="true"
+								/>
 								<span className="sr-only">Configured</span>
 							</span>
 						)}
@@ -1694,7 +1974,12 @@ function ProviderCard({
 						{primaryLabel}
 					</Button>
 					{shouldShowRemove && (
-						<Button onClick={onRemove} variant="outline" size="sm" loading={removing}>
+						<Button
+							onClick={onRemove}
+							variant="outline"
+							size="sm"
+							loading={removing}
+						>
 							Remove
 						</Button>
 					)}
@@ -1739,7 +2024,8 @@ function ChatGptOAuthDialog({
 					</DialogTitle>
 					{!message && (
 						<DialogDescription>
-							Copy the device code below, then sign in to your OpenAI account to authorize access.
+							Copy the device code below, then sign in to your OpenAI account to
+							authorize access.
 						</DialogDescription>
 					)}
 				</DialogHeader>
@@ -1748,9 +2034,10 @@ function ChatGptOAuthDialog({
 					{message && !deviceCodeInfo ? (
 						/* Completed state — success or error with no active flow */
 						<div
-							className={`rounded-md border px-3 py-2 text-sm ${message.type === "success"
-								? "border-green-500/20 bg-green-500/10 text-green-400"
-								: "border-red-500/20 bg-red-500/10 text-red-400"
+							className={`rounded-md border px-3 py-2 text-sm ${
+								message.type === "success"
+									? "border-green-500/20 bg-green-500/10 text-green-400"
+									: "border-red-500/20 bg-red-500/10 text-red-400"
 							}`}
 						>
 							{message.text}
@@ -1764,23 +2051,35 @@ function ChatGptOAuthDialog({
 						<div className="space-y-4">
 							<div className="rounded-md border border-app-line p-3">
 								<div className="flex items-center gap-2">
-									<span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent/15 text-[11px] font-semibold text-accent">1</span>
+									<span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent/15 text-[11px] font-semibold text-accent">
+										1
+									</span>
 									<p className="text-sm text-ink-dull">Copy this device code</p>
 								</div>
 								<div className="mt-2.5 flex items-center gap-2 pl-7">
 									<code className="rounded border border-app-line bg-app-darkerBox px-3 py-1.5 font-mono text-base tracking-widest text-ink">
 										{deviceCodeInfo.userCode}
 									</code>
-									<Button onClick={onCopyDeviceCode} size="sm" variant={deviceCodeCopied ? "secondary" : "outline"}>
+									<Button
+										onClick={onCopyDeviceCode}
+										size="sm"
+										variant={deviceCodeCopied ? "secondary" : "outline"}
+									>
 										{deviceCodeCopied ? "Copied" : "Copy"}
 									</Button>
 								</div>
 							</div>
 
-							<div className={`rounded-md border border-app-line p-3 ${!deviceCodeCopied ? "opacity-50" : ""}`}>
+							<div
+								className={`rounded-md border border-app-line p-3 ${!deviceCodeCopied ? "opacity-50" : ""}`}
+							>
 								<div className="flex items-center gap-2">
-									<span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent/15 text-[11px] font-semibold text-accent">2</span>
-									<p className="text-sm text-ink-dull">Open OpenAI and paste the code</p>
+									<span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent/15 text-[11px] font-semibold text-accent">
+										2
+									</span>
+									<p className="text-sm text-ink-dull">
+										Open OpenAI and paste the code
+									</p>
 								</div>
 								<div className="mt-2.5 pl-7">
 									<Button
@@ -1803,9 +2102,10 @@ function ChatGptOAuthDialog({
 
 							{message && (
 								<div
-									className={`rounded-md border px-3 py-2 text-sm ${message.type === "success"
-										? "border-green-500/20 bg-green-500/10 text-green-400"
-										: "border-red-500/20 bg-red-500/10 text-red-400"
+									className={`rounded-md border px-3 py-2 text-sm ${
+										message.type === "success"
+											? "border-green-500/20 bg-green-500/10 text-green-400"
+											: "border-red-500/20 bg-red-500/10 text-red-400"
 									}`}
 								>
 									{message.text}
@@ -1824,7 +2124,11 @@ function ChatGptOAuthDialog({
 							</Button>
 						) : (
 							<>
-								<Button onClick={() => onOpenChange(false)} variant="ghost" size="sm">
+								<Button
+									onClick={() => onOpenChange(false)}
+									variant="ghost"
+									size="sm"
+								>
 									Close
 								</Button>
 								<Button
@@ -1839,7 +2143,11 @@ function ChatGptOAuthDialog({
 						)
 					) : (
 						<>
-							<Button onClick={() => onOpenChange(false)} variant="ghost" size="sm">
+							<Button
+								onClick={() => onOpenChange(false)}
+								variant="ghost"
+								size="sm"
+							>
 								Cancel
 							</Button>
 							{deviceCodeInfo && (

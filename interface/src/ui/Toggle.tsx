@@ -1,7 +1,7 @@
 import * as React from "react";
 import * as SwitchPrimitives from "@radix-ui/react-switch";
-import {cva, type VariantProps} from "class-variance-authority";
-import {cx} from "./utils";
+import { cva, type VariantProps } from "class-variance-authority";
+import { cx } from "./utils";
 
 const switchStyles = cva(
 	[
@@ -43,20 +43,19 @@ const thumbStyles = cva(
 );
 
 export interface ToggleProps
-	extends
-		React.ComponentPropsWithoutRef<typeof SwitchPrimitives.Root>,
+	extends React.ComponentPropsWithoutRef<typeof SwitchPrimitives.Root>,
 		VariantProps<typeof switchStyles> {}
 
 export const Toggle = React.forwardRef<
 	React.ElementRef<typeof SwitchPrimitives.Root>,
 	ToggleProps
->(({className, size, ...props}, ref) => (
+>(({ className, size, ...props }, ref) => (
 	<SwitchPrimitives.Root
-		className={cx(switchStyles({size}), className)}
+		className={cx(switchStyles({ size }), className)}
 		{...props}
 		ref={ref}
 	>
-		<SwitchPrimitives.Thumb className={cx(thumbStyles({size}))} />
+		<SwitchPrimitives.Thumb className={cx(thumbStyles({ size }))} />
 	</SwitchPrimitives.Root>
 ));
 

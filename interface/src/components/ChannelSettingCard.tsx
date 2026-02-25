@@ -1,7 +1,7 @@
-import {useState} from "react";
-import {AnimatePresence, motion} from "framer-motion";
-import {useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
-import {api, type PlatformStatus, type BindingInfo} from "@/api/client";
+import { useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { api, type PlatformStatus, type BindingInfo } from "@/api/client";
 import {
 	Button,
 	Input,
@@ -17,10 +17,10 @@ import {
 	DialogFooter,
 	Toggle,
 } from "@/ui";
-import {PlatformIcon} from "@/lib/platformIcons";
-import {TagInput} from "@/components/TagInput";
-import {FontAwesomeIcon} from "@fortawesome/react-fontawesome";
-import {faChevronDown} from "@fortawesome/free-solid-svg-icons";
+import { PlatformIcon } from "@/lib/platformIcons";
+import { TagInput } from "@/components/TagInput";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faChevronDown } from "@fortawesome/free-solid-svg-icons";
 
 type Platform = "discord" | "slack" | "telegram" | "twitch" | "webhook";
 
@@ -67,14 +67,14 @@ export function ChannelSettingCard({
 		dm_allowed_users: [] as string[],
 	});
 
-	const {data: bindingsData} = useQuery({
+	const { data: bindingsData } = useQuery({
 		queryKey: ["bindings"],
 		queryFn: () => api.bindings(),
 		staleTime: 5_000,
 		enabled: expanded && configured,
 	});
 
-	const {data: agentsData} = useQuery({
+	const { data: agentsData } = useQuery({
 		queryKey: ["agents"],
 		queryFn: api.agents,
 		staleTime: 10_000,
@@ -88,10 +88,10 @@ export function ChannelSettingCard({
 		mutationFn: (newEnabled: boolean) =>
 			api.togglePlatform(platform, newEnabled),
 		onSuccess: () => {
-			queryClient.invalidateQueries({queryKey: ["messaging-status"]});
+			queryClient.invalidateQueries({ queryKey: ["messaging-status"] });
 		},
 		onError: (error) =>
-			setMessage({text: `Failed: ${error.message}`, type: "error"}),
+			setMessage({ text: `Failed: ${error.message}`, type: "error" }),
 	});
 
 	// --- Mutations ---
@@ -101,15 +101,15 @@ export function ChannelSettingCard({
 		onSuccess: (result) => {
 			if (result.success) {
 				setCredentialInputs({});
-				setMessage({text: result.message, type: "success"});
-				queryClient.invalidateQueries({queryKey: ["messaging-status"]});
-				queryClient.invalidateQueries({queryKey: ["bindings"]});
+				setMessage({ text: result.message, type: "success" });
+				queryClient.invalidateQueries({ queryKey: ["messaging-status"] });
+				queryClient.invalidateQueries({ queryKey: ["bindings"] });
 			} else {
-				setMessage({text: result.message, type: "error"});
+				setMessage({ text: result.message, type: "error" });
 			}
 		},
 		onError: (error) =>
-			setMessage({text: `Failed: ${error.message}`, type: "error"}),
+			setMessage({ text: `Failed: ${error.message}`, type: "error" }),
 	});
 
 	const addBindingMutation = useMutation({
@@ -118,14 +118,14 @@ export function ChannelSettingCard({
 			if (result.success) {
 				setAddingBinding(false);
 				resetBindingForm();
-				setMessage({text: result.message, type: "success"});
-				queryClient.invalidateQueries({queryKey: ["bindings"]});
+				setMessage({ text: result.message, type: "success" });
+				queryClient.invalidateQueries({ queryKey: ["bindings"] });
 			} else {
-				setMessage({text: result.message, type: "error"});
+				setMessage({ text: result.message, type: "error" });
 			}
 		},
 		onError: (error) =>
-			setMessage({text: `Failed: ${error.message}`, type: "error"}),
+			setMessage({ text: `Failed: ${error.message}`, type: "error" }),
 	});
 
 	const updateBindingMutation = useMutation({
@@ -134,28 +134,28 @@ export function ChannelSettingCard({
 			if (result.success) {
 				setEditingBinding(null);
 				resetBindingForm();
-				setMessage({text: result.message, type: "success"});
-				queryClient.invalidateQueries({queryKey: ["bindings"]});
+				setMessage({ text: result.message, type: "success" });
+				queryClient.invalidateQueries({ queryKey: ["bindings"] });
 			} else {
-				setMessage({text: result.message, type: "error"});
+				setMessage({ text: result.message, type: "error" });
 			}
 		},
 		onError: (error) =>
-			setMessage({text: `Failed: ${error.message}`, type: "error"}),
+			setMessage({ text: `Failed: ${error.message}`, type: "error" }),
 	});
 
 	const deleteBindingMutation = useMutation({
 		mutationFn: api.deleteBinding,
 		onSuccess: (result) => {
 			if (result.success) {
-				setMessage({text: result.message, type: "success"});
-				queryClient.invalidateQueries({queryKey: ["bindings"]});
+				setMessage({ text: result.message, type: "success" });
+				queryClient.invalidateQueries({ queryKey: ["bindings"] });
 			} else {
-				setMessage({text: result.message, type: "error"});
+				setMessage({ text: result.message, type: "error" });
 			}
 		},
 		onError: (error) =>
-			setMessage({text: `Failed: ${error.message}`, type: "error"}),
+			setMessage({ text: `Failed: ${error.message}`, type: "error" }),
 	});
 
 	const disconnectMutation = useMutation({
@@ -163,11 +163,11 @@ export function ChannelSettingCard({
 		onSuccess: () => {
 			setConfirmDisconnect(false);
 			setMessage(null);
-			queryClient.invalidateQueries({queryKey: ["messaging-status"]});
-			queryClient.invalidateQueries({queryKey: ["bindings"]});
+			queryClient.invalidateQueries({ queryKey: ["messaging-status"] });
+			queryClient.invalidateQueries({ queryKey: ["bindings"] });
 		},
 		onError: (error) =>
-			setMessage({text: `Failed: ${error.message}`, type: "error"}),
+			setMessage({ text: `Failed: ${error.message}`, type: "error" }),
 	});
 
 	function resetBindingForm() {
@@ -183,7 +183,7 @@ export function ChannelSettingCard({
 	}
 
 	function handleSaveCredentials() {
-		const request: any = {agent_id: "main", channel: platform};
+		const request: any = { agent_id: "main", channel: platform };
 		if (platform === "discord") {
 			if (!credentialInputs.discord_token?.trim()) return;
 			request.platform_credentials = {
@@ -205,7 +205,11 @@ export function ChannelSettingCard({
 				telegram_token: credentialInputs.telegram_token.trim(),
 			};
 		} else if (platform === "twitch") {
-			if (!credentialInputs.twitch_username?.trim() || !credentialInputs.twitch_oauth_token?.trim()) return;
+			if (
+				!credentialInputs.twitch_username?.trim() ||
+				!credentialInputs.twitch_oauth_token?.trim()
+			)
+				return;
 			request.platform_credentials = {
 				twitch_username: credentialInputs.twitch_username.trim(),
 				twitch_oauth_token: credentialInputs.twitch_oauth_token.trim(),
@@ -218,7 +222,7 @@ export function ChannelSettingCard({
 	}
 
 	function handleAddBinding() {
-		const request: any = {agent_id: bindingForm.agent_id, channel: platform};
+		const request: any = { agent_id: bindingForm.agent_id, channel: platform };
 		if (platform === "discord" && bindingForm.guild_id.trim())
 			request.guild_id = bindingForm.guild_id.trim();
 		if (platform === "slack" && bindingForm.workspace_id.trim())
@@ -259,7 +263,10 @@ export function ChannelSettingCard({
 	}
 
 	function handleDeleteBinding(binding: BindingInfo) {
-		const request: any = {agent_id: binding.agent_id, channel: binding.channel};
+		const request: any = {
+			agent_id: binding.agent_id,
+			channel: binding.channel,
+		};
 		if (binding.guild_id) request.guild_id = binding.guild_id;
 		if (binding.workspace_id) request.workspace_id = binding.workspace_id;
 		if (binding.chat_id) request.chat_id = binding.chat_id;
@@ -309,8 +316,8 @@ export function ChannelSettingCard({
 					<p className="mt-0.5 text-sm text-ink-dull">{description}</p>
 				</div>
 				<motion.div
-					animate={{rotate: expanded ? 180 : 0}}
-					transition={{duration: 0.2}}
+					animate={{ rotate: expanded ? 180 : 0 }}
+					transition={{ duration: 0.2 }}
 					className="text-ink-faint"
 				>
 					<FontAwesomeIcon icon={faChevronDown} size="sm" />
@@ -321,10 +328,10 @@ export function ChannelSettingCard({
 			<AnimatePresence initial={false}>
 				{expanded && (
 					<motion.div
-						initial={{height: 0, opacity: 0}}
-						animate={{height: "auto", opacity: 1}}
-						exit={{height: 0, opacity: 0}}
-						transition={{duration: 0.25, ease: [0.4, 0, 0.2, 1]}}
+						initial={{ height: 0, opacity: 0 }}
+						animate={{ height: "auto", opacity: 1 }}
+						exit={{ height: 0, opacity: 0 }}
+						transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
 						className="overflow-hidden"
 					>
 						<div className="border-t border-app-line/50 bg-app-darkBox px-4 pb-4 pt-4 flex flex-col gap-4">
@@ -502,7 +509,12 @@ function CredentialsSection({
 					/>
 					<p className="mt-1.5 text-xs text-ink-faint">
 						Need help?{" "}
-						<a href="https://docs.spacebot.sh/discord-setup" target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
+						<a
+							href="https://docs.spacebot.sh/discord-setup"
+							target="_blank"
+							rel="noopener noreferrer"
+							className="text-accent hover:underline"
+						>
 							Read the Discord setup docs &rarr;
 						</a>
 					</p>
@@ -554,7 +566,12 @@ function CredentialsSection({
 					</div>
 					<p className="text-xs text-ink-faint">
 						Need help?{" "}
-						<a href="https://docs.spacebot.sh/slack-setup" target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
+						<a
+							href="https://docs.spacebot.sh/slack-setup"
+							target="_blank"
+							rel="noopener noreferrer"
+							className="text-accent hover:underline"
+						>
 							Read the Slack setup docs &rarr;
 						</a>
 					</p>
@@ -587,7 +604,12 @@ function CredentialsSection({
 					/>
 					<p className="mt-1.5 text-xs text-ink-faint">
 						Need help?{" "}
-						<a href="https://docs.spacebot.sh/telegram-setup" target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
+						<a
+							href="https://docs.spacebot.sh/telegram-setup"
+							target="_blank"
+							rel="noopener noreferrer"
+							className="text-accent hover:underline"
+						>
 							Read the Telegram setup docs &rarr;
 						</a>
 					</p>
@@ -629,7 +651,9 @@ function CredentialsSection({
 									})
 								}
 								placeholder={
-									configured ? "Enter new client id to update" : "your-app-client-id"
+									configured
+										? "Enter new client id to update"
+										: "your-app-client-id"
 								}
 							/>
 						</div>
@@ -648,7 +672,9 @@ function CredentialsSection({
 									})
 								}
 								placeholder={
-									configured ? "Enter new client secret to update" : "your-app-client-secret"
+									configured
+										? "Enter new client secret to update"
+										: "your-app-client-secret"
 								}
 							/>
 						</div>
@@ -691,17 +717,26 @@ function CredentialsSection({
 									})
 								}
 								placeholder={
-									configured ? "Enter new refresh token to update" : "refresh-token-from-twitch"
+									configured
+										? "Enter new refresh token to update"
+										: "refresh-token-from-twitch"
 								}
 							/>
 						</div>
 					</div>
 					<p className="mt-1 text-xs text-ink-faint">
-						Use tokens from your Twitch application with chat:read and chat:write scopes enabled. Tokens are stored in your Spacebot instance and refreshed automatically while running.
+						Use tokens from your Twitch application with chat:read and
+						chat:write scopes enabled. Tokens are stored in your Spacebot
+						instance and refreshed automatically while running.
 					</p>
 					<p className="mt-1.5 text-xs text-ink-faint">
 						Need help?{" "}
-						<a href="https://docs.spacebot.sh/twitch-setup" target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
+						<a
+							href="https://docs.spacebot.sh/twitch-setup"
+							target="_blank"
+							rel="noopener noreferrer"
+							className="text-accent hover:underline"
+						>
 							Read the Twitch setup docs &rarr;
 						</a>
 					</p>
@@ -744,7 +779,7 @@ function BindingsSection({
 }: {
 	platform: Platform;
 	bindings: BindingInfo[];
-	agents: {id: string}[];
+	agents: { id: string }[];
 	isEditingOrAdding: boolean;
 	editingBinding: BindingInfo | null;
 	bindingForm: {
@@ -804,9 +839,7 @@ function BindingsSection({
 											{binding.dm_allowed_users.length > 1 ? "s" : ""}
 										</span>
 									)}
-									{binding.require_mention && (
-										<span>Mention only</span>
-									)}
+									{binding.require_mention && <span>Mention only</span>}
 									{!binding.guild_id &&
 										!binding.workspace_id &&
 										!binding.chat_id &&
@@ -879,7 +912,7 @@ function BindingForm({
 	saving,
 }: {
 	platform: Platform;
-	agents: {id: string}[];
+	agents: { id: string }[];
 	bindingForm: {
 		agent_id: string;
 		guild_id: string;
@@ -902,7 +935,7 @@ function BindingForm({
 				</label>
 				<Select
 					value={bindingForm.agent_id}
-					onValueChange={(v) => setBindingForm({...bindingForm, agent_id: v})}
+					onValueChange={(v) => setBindingForm({ ...bindingForm, agent_id: v })}
 				>
 					<SelectTrigger>
 						<SelectValue />
@@ -926,7 +959,7 @@ function BindingForm({
 						size="lg"
 						value={bindingForm.guild_id}
 						onChange={(e) =>
-							setBindingForm({...bindingForm, guild_id: e.target.value})
+							setBindingForm({ ...bindingForm, guild_id: e.target.value })
 						}
 						placeholder="Optional — leave empty for all servers"
 					/>
@@ -942,7 +975,7 @@ function BindingForm({
 						size="lg"
 						value={bindingForm.workspace_id}
 						onChange={(e) =>
-							setBindingForm({...bindingForm, workspace_id: e.target.value})
+							setBindingForm({ ...bindingForm, workspace_id: e.target.value })
 						}
 						placeholder="Optional — leave empty for all workspaces"
 					/>
@@ -958,7 +991,7 @@ function BindingForm({
 						size="lg"
 						value={bindingForm.chat_id}
 						onChange={(e) =>
-							setBindingForm({...bindingForm, chat_id: e.target.value})
+							setBindingForm({ ...bindingForm, chat_id: e.target.value })
 						}
 						placeholder="Optional — leave empty for all chats"
 					/>
@@ -973,7 +1006,7 @@ function BindingForm({
 					<TagInput
 						value={bindingForm.channel_ids}
 						onChange={(ids) =>
-							setBindingForm({...bindingForm, channel_ids: ids})
+							setBindingForm({ ...bindingForm, channel_ids: ids })
 						}
 						placeholder="Add channel ID..."
 					/>
@@ -986,7 +1019,10 @@ function BindingForm({
 						type="checkbox"
 						checked={bindingForm.require_mention}
 						onChange={(e) =>
-							setBindingForm({...bindingForm, require_mention: e.target.checked})
+							setBindingForm({
+								...bindingForm,
+								require_mention: e.target.checked,
+							})
 						}
 						className="h-4 w-4 rounded border-app-line bg-app-box"
 					/>
@@ -1004,7 +1040,7 @@ function BindingForm({
 					<TagInput
 						value={bindingForm.channel_ids}
 						onChange={(ids) =>
-							setBindingForm({...bindingForm, channel_ids: ids})
+							setBindingForm({ ...bindingForm, channel_ids: ids })
 						}
 						placeholder="Add channel name..."
 					/>
@@ -1018,7 +1054,7 @@ function BindingForm({
 				<TagInput
 					value={bindingForm.dm_allowed_users}
 					onChange={(users) =>
-						setBindingForm({...bindingForm, dm_allowed_users: users})
+						setBindingForm({ ...bindingForm, dm_allowed_users: users })
 					}
 					placeholder="Add user ID..."
 				/>

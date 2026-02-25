@@ -1,7 +1,7 @@
 import * as React from "react";
-import {cva, type VariantProps} from "class-variance-authority";
-import {cx} from "./utils";
-import {Loader} from "./Loader";
+import { cva, type VariantProps } from "class-variance-authority";
+import { cx } from "./utils";
+import { Loader } from "./Loader";
 
 export const buttonStyles = cva(
 	[
@@ -42,7 +42,8 @@ export const buttonStyles = cva(
 export type ButtonBaseProps = VariantProps<typeof buttonStyles>;
 
 export interface ButtonProps
-	extends React.ButtonHTMLAttributes<HTMLButtonElement>, ButtonBaseProps {
+	extends React.ButtonHTMLAttributes<HTMLButtonElement>,
+		ButtonBaseProps {
 	loading?: boolean;
 	leftIcon?: React.ReactNode;
 	rightIcon?: React.ReactNode;
@@ -68,7 +69,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 
 		return (
 			<button
-				className={cx(buttonStyles({variant, size}), className)}
+				className={cx(buttonStyles({ variant, size }), className)}
 				ref={ref}
 				disabled={isDisabled}
 				{...props}

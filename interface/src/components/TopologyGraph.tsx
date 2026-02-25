@@ -32,7 +32,15 @@ import {
 	type LinkDirection,
 	type LinkKind,
 } from "@/api/client";
-import { Button, Input, Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/ui";
+import {
+	Button,
+	Input,
+	Dialog,
+	DialogContent,
+	DialogHeader,
+	DialogTitle,
+	DialogFooter,
+} from "@/ui";
 import { Link } from "@tanstack/react-router";
 
 // -- Colors --
@@ -173,7 +181,16 @@ function ProfileNode({ data, selected }: NodeProps) {
 					}}
 					className="absolute top-2 right-2 z-10 rounded p-1 text-ink-faint opacity-0 transition-opacity hover:bg-ink/10 hover:text-ink group-hover/node:opacity-100"
 				>
-					<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+					<svg
+						width="14"
+						height="14"
+						viewBox="0 0 16 16"
+						fill="none"
+						stroke="currentColor"
+						strokeWidth="1.5"
+						strokeLinecap="round"
+						strokeLinejoin="round"
+					>
 						<path d="M11.5 1.5l3 3L5 14H2v-3L11.5 1.5z" />
 					</svg>
 				</button>
@@ -258,11 +275,13 @@ function ProfileNode({ data, selected }: NodeProps) {
 						<span className="font-plex text-sm font-semibold text-ink hover:text-accent transition-colors truncate">
 							{primaryName}
 						</span>
-						{chosenName && chosenName !== primaryName && chosenName !== nodeId && (
-							<span className="text-[11px] text-ink-faint truncate">
-								"{chosenName}"
-							</span>
-						)}
+						{chosenName &&
+							chosenName !== primaryName &&
+							chosenName !== nodeId && (
+								<span className="text-[11px] text-ink-faint truncate">
+									"{chosenName}"
+								</span>
+							)}
 					</Link>
 				) : (
 					<div className="flex items-baseline gap-1.5 truncate">
@@ -290,12 +309,16 @@ function ProfileNode({ data, selected }: NodeProps) {
 				{isAgent && (
 					<div className="mt-2 flex items-center gap-3 border-t border-app-line/40 pt-2 text-[10px] text-ink-faint">
 						<span>
-							<span className="font-medium text-ink-dull">{channelCount}</span> channels
+							<span className="font-medium text-ink-dull">{channelCount}</span>{" "}
+							channels
 						</span>
 						<span>
 							<span className="font-medium text-ink-dull">
-								{memoryCount >= 1000 ? `${(memoryCount / 1000).toFixed(1)}k` : memoryCount}
-							</span> memories
+								{memoryCount >= 1000
+									? `${(memoryCount / 1000).toFixed(1)}k`
+									: memoryCount}
+							</span>{" "}
+							memories
 						</span>
 					</div>
 				)}
@@ -303,14 +326,38 @@ function ProfileNode({ data, selected }: NodeProps) {
 
 			{/* Handles on all four sides */}
 			{(["top", "bottom", "left", "right"] as const).map((side) => (
-				<Handle key={`src-${side}`} type="source" id={side}
-					position={side === "top" ? Position.Top : side === "bottom" ? Position.Bottom : side === "left" ? Position.Left : Position.Right}
-					className={`!h-2.5 !w-2.5 !border-2 !border-app-darkBox ${connected[side] ? "!bg-accent" : "!bg-app-line"}`} />
+				<Handle
+					key={`src-${side}`}
+					type="source"
+					id={side}
+					position={
+						side === "top"
+							? Position.Top
+							: side === "bottom"
+								? Position.Bottom
+								: side === "left"
+									? Position.Left
+									: Position.Right
+					}
+					className={`!h-2.5 !w-2.5 !border-2 !border-app-darkBox ${connected[side] ? "!bg-accent" : "!bg-app-line"}`}
+				/>
 			))}
 			{(["top", "bottom", "left", "right"] as const).map((side) => (
-				<Handle key={`tgt-${side}`} type="target" id={side}
-					position={side === "top" ? Position.Top : side === "bottom" ? Position.Bottom : side === "left" ? Position.Left : Position.Right}
-					className={`!h-2.5 !w-2.5 !border-2 !border-app-darkBox ${connected[side] ? "!bg-accent" : "!bg-app-line"}`} />
+				<Handle
+					key={`tgt-${side}`}
+					type="target"
+					id={side}
+					position={
+						side === "top"
+							? Position.Top
+							: side === "bottom"
+								? Position.Bottom
+								: side === "left"
+									? Position.Left
+									: Position.Right
+					}
+					className={`!h-2.5 !w-2.5 !border-2 !border-app-darkBox ${connected[side] ? "!bg-accent" : "!bg-app-line"}`}
+				/>
 			))}
 		</div>
 	);
@@ -459,7 +506,9 @@ function EdgeConfigPanel({
 
 			{/* Kind */}
 			<div className="mb-3">
-				<label className="mb-1 block text-tiny font-medium text-ink-dull">Kind</label>
+				<label className="mb-1 block text-tiny font-medium text-ink-dull">
+					Kind
+				</label>
 				<div className="flex gap-1.5">
 					{(["hierarchical", "peer"] as const).map((k) => (
 						<button
@@ -479,7 +528,9 @@ function EdgeConfigPanel({
 
 			{/* Direction */}
 			<div className="mb-4">
-				<label className="mb-1 block text-tiny font-medium text-ink-dull">Direction</label>
+				<label className="mb-1 block text-tiny font-medium text-ink-dull">
+					Direction
+				</label>
 				<div className="flex gap-1.5">
 					{(["one_way", "two_way"] as const).map((d) => (
 						<button
@@ -521,7 +572,12 @@ function EdgeConfigPanel({
 // -- Human Edit Dialog --
 
 interface HumanEditDialogProps {
-	human: { id: string; display_name?: string; role?: string; bio?: string } | null;
+	human: {
+		id: string;
+		display_name?: string;
+		role?: string;
+		bio?: string;
+	} | null;
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
 	onUpdate: (displayName: string, role: string, bio: string) => void;
@@ -559,7 +615,9 @@ function HumanEditDialog({
 				<div className="flex flex-col gap-3">
 					<div className="text-tiny text-ink-faint">{human.id}</div>
 					<div>
-						<label className="mb-1.5 block text-sm font-medium text-ink-dull">Display Name</label>
+						<label className="mb-1.5 block text-sm font-medium text-ink-dull">
+							Display Name
+						</label>
 						<Input
 							size="lg"
 							value={displayName}
@@ -568,7 +626,9 @@ function HumanEditDialog({
 						/>
 					</div>
 					<div>
-						<label className="mb-1.5 block text-sm font-medium text-ink-dull">Role</label>
+						<label className="mb-1.5 block text-sm font-medium text-ink-dull">
+							Role
+						</label>
 						<Input
 							size="lg"
 							value={role}
@@ -577,7 +637,9 @@ function HumanEditDialog({
 						/>
 					</div>
 					<div>
-						<label className="mb-1.5 block text-sm font-medium text-ink-dull">Bio</label>
+						<label className="mb-1.5 block text-sm font-medium text-ink-dull">
+							Bio
+						</label>
 						<textarea
 							value={bio}
 							onChange={(e) => setBio(e.target.value)}
@@ -640,7 +702,9 @@ function AgentEditDialog({
 				<div className="flex flex-col gap-3">
 					<div className="text-tiny text-ink-faint">{agent.id}</div>
 					<div>
-						<label className="mb-1.5 block text-sm font-medium text-ink-dull">Display Name</label>
+						<label className="mb-1.5 block text-sm font-medium text-ink-dull">
+							Display Name
+						</label>
 						<Input
 							size="lg"
 							value={displayName}
@@ -649,7 +713,9 @@ function AgentEditDialog({
 						/>
 					</div>
 					<div>
-						<label className="mb-1.5 block text-sm font-medium text-ink-dull">Role</label>
+						<label className="mb-1.5 block text-sm font-medium text-ink-dull">
+							Role
+						</label>
 						<Input
 							size="lg"
 							value={role}
@@ -690,7 +756,9 @@ function GroupConfigPanel({
 	onClose,
 }: GroupConfigPanelProps) {
 	const [name, setName] = useState(group.name);
-	const [agentIds, setAgentIds] = useState<Set<string>>(new Set(group.agent_ids));
+	const [agentIds, setAgentIds] = useState<Set<string>>(
+		new Set(group.agent_ids),
+	);
 
 	const toggleAgent = (id: string) => {
 		setAgentIds((prev) => {
@@ -721,7 +789,9 @@ function GroupConfigPanel({
 
 			{/* Name */}
 			<div className="mb-3">
-				<label className="mb-1 block text-tiny font-medium text-ink-dull">Name</label>
+				<label className="mb-1 block text-tiny font-medium text-ink-dull">
+					Name
+				</label>
 				<input
 					value={name}
 					onChange={(e) => setName(e.target.value)}
@@ -731,7 +801,9 @@ function GroupConfigPanel({
 
 			{/* Agent membership */}
 			<div className="mb-4">
-				<label className="mb-1 block text-tiny font-medium text-ink-dull">Agents</label>
+				<label className="mb-1 block text-tiny font-medium text-ink-dull">
+					Agents
+				</label>
 				<div className="flex flex-col gap-1 max-h-40 overflow-y-auto">
 					{allAgents.map((id) => (
 						<button
@@ -785,10 +857,21 @@ interface TopologyGraphInnerProps {
 function TopologyGraphInner({ activeEdges, agents }: TopologyGraphInnerProps) {
 	const queryClient = useQueryClient();
 	const [selectedEdge, setSelectedEdge] = useState<Edge | null>(null);
-	const [selectedGroup, setSelectedGroup] = useState<TopologyGroup | null>(null);
-	const [selectedHuman, setSelectedHuman] = useState<{ id: string; display_name?: string; role?: string; bio?: string } | null>(null);
+	const [selectedGroup, setSelectedGroup] = useState<TopologyGroup | null>(
+		null,
+	);
+	const [selectedHuman, setSelectedHuman] = useState<{
+		id: string;
+		display_name?: string;
+		role?: string;
+		bio?: string;
+	} | null>(null);
 	const [humanDialogOpen, setHumanDialogOpen] = useState(false);
-	const [selectedAgent, setSelectedAgent] = useState<{ id: string; display_name?: string; role?: string } | null>(null);
+	const [selectedAgent, setSelectedAgent] = useState<{
+		id: string;
+		display_name?: string;
+		role?: string;
+	} | null>(null);
 	const [agentDialogOpen, setAgentDialogOpen] = useState(false);
 
 	const { data, isLoading, error } = useQuery({
@@ -811,23 +894,34 @@ function TopologyGraphInner({ activeEdges, agents }: TopologyGraphInnerProps) {
 	}, [agents]);
 
 	/** Inject onEdit callbacks into profile nodes */
-	const patchEditCallbacks = useCallback((nodes: Node[]): Node[] =>
-		nodes.map((n) => {
-			if (n.type === "human") {
-				return { ...n, data: { ...n.data, onEdit: () => openHumanEditRef.current(n.id) } };
-			}
-			if (n.type === "agent") {
-				return { ...n, data: { ...n.data, onEdit: () => openAgentEditRef.current(n.id) } };
-			}
-			return n;
-		}),
-	[]);
+	const patchEditCallbacks = useCallback(
+		(nodes: Node[]): Node[] =>
+			nodes.map((n) => {
+				if (n.type === "human") {
+					return {
+						...n,
+						data: { ...n.data, onEdit: () => openHumanEditRef.current(n.id) },
+					};
+				}
+				if (n.type === "agent") {
+					return {
+						...n,
+						data: { ...n.data, onEdit: () => openAgentEditRef.current(n.id) },
+					};
+				}
+				return n;
+			}),
+		[],
+	);
 
 	// Build nodes and edges from topology data
 	const { initialNodes, initialEdges } = useMemo(() => {
 		if (!data) return { initialNodes: [], initialEdges: [] };
 		const graph = buildGraph(data, activeEdges, agentProfiles);
-		return { initialNodes: patchEditCallbacks(graph.initialNodes), initialEdges: graph.initialEdges };
+		return {
+			initialNodes: patchEditCallbacks(graph.initialNodes),
+			initialEdges: graph.initialEdges,
+		};
 	}, [data, activeEdges, agentProfiles, patchEditCallbacks]);
 
 	const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
@@ -836,7 +930,10 @@ function TopologyGraphInner({ activeEdges, agents }: TopologyGraphInnerProps) {
 	// Sync when topology data or agent profiles change
 	const prevDataRef = useRef(data);
 	const prevProfilesRef = useRef(agentProfiles);
-	if (data !== prevDataRef.current || agentProfiles !== prevProfilesRef.current) {
+	if (
+		data !== prevDataRef.current ||
+		agentProfiles !== prevProfilesRef.current
+	) {
 		prevDataRef.current = data;
 		prevProfilesRef.current = agentProfiles;
 		if (data) {
@@ -847,13 +944,13 @@ function TopologyGraphInner({ activeEdges, agents }: TopologyGraphInnerProps) {
 			);
 
 			// Preserve existing node positions
-			const positionMap = new Map(
-				nodes.map((n) => [n.id, n.position]),
+			const positionMap = new Map(nodes.map((n) => [n.id, n.position]));
+			const mergedNodes = patchEditCallbacks(
+				newNodes.map((n) => ({
+					...n,
+					position: positionMap.get(n.id) ?? n.position,
+				})),
 			);
-			const mergedNodes = patchEditCallbacks(newNodes.map((n) => ({
-				...n,
-				position: positionMap.get(n.id) ?? n.position,
-			})));
 
 			setNodes(mergedNodes);
 			setEdges(newEdges);
@@ -919,15 +1016,18 @@ function TopologyGraphInner({ activeEdges, agents }: TopologyGraphInnerProps) {
 	});
 
 	const createGroup = useMutation({
-		mutationFn: (name: string) =>
-			api.createGroup({ name, agent_ids: [] }),
+		mutationFn: (name: string) => api.createGroup({ name, agent_ids: [] }),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: ["topology"] });
 		},
 	});
 
 	const updateGroup = useMutation({
-		mutationFn: (params: { originalName: string; agentIds: string[]; name: string }) =>
+		mutationFn: (params: {
+			originalName: string;
+			agentIds: string[];
+			name: string;
+		}) =>
 			api.updateGroup(params.originalName, {
 				name: params.name,
 				agent_ids: params.agentIds,
@@ -954,7 +1054,12 @@ function TopologyGraphInner({ activeEdges, agents }: TopologyGraphInnerProps) {
 	});
 
 	const updateHuman = useMutation({
-		mutationFn: (params: { id: string; displayName?: string; role?: string; bio?: string }) =>
+		mutationFn: (params: {
+			id: string;
+			displayName?: string;
+			role?: string;
+			bio?: string;
+		}) =>
 			api.updateHuman(params.id, {
 				display_name: params.displayName,
 				role: params.role,
@@ -995,8 +1100,7 @@ function TopologyGraphInner({ activeEdges, agents }: TopologyGraphInnerProps) {
 			if (connection.source === connection.target) return;
 
 			const exists = edges.some(
-				(e) =>
-					e.source === connection.source && e.target === connection.target,
+				(e) => e.source === connection.source && e.target === connection.target,
 			);
 			if (exists) return;
 
@@ -1005,8 +1109,14 @@ function TopologyGraphInner({ activeEdges, agents }: TopologyGraphInnerProps) {
 			// For hierarchical links from bottom handle, from=source (superior), to=target
 			// For hierarchical links from top handle, from=target (superior), to=source
 			const isFromTop = connection.sourceHandle === "top";
-			const from = (kind === "hierarchical" && isFromTop) ? connection.target : connection.source;
-			const to = (kind === "hierarchical" && isFromTop) ? connection.source : connection.target;
+			const from =
+				kind === "hierarchical" && isFromTop
+					? connection.target
+					: connection.source;
+			const to =
+				kind === "hierarchical" && isFromTop
+					? connection.source
+					: connection.target;
 
 			createLink.mutate({
 				from,
@@ -1018,13 +1128,10 @@ function TopologyGraphInner({ activeEdges, agents }: TopologyGraphInnerProps) {
 		[edges, createLink],
 	);
 
-	const onEdgeClick = useCallback(
-		(_: React.MouseEvent, edge: Edge) => {
-			setSelectedEdge(edge);
-			setSelectedGroup(null);
-		},
-		[],
-	);
+	const onEdgeClick = useCallback((_: React.MouseEvent, edge: Edge) => {
+		setSelectedEdge(edge);
+		setSelectedGroup(null);
+	}, []);
 
 	const groups = data?.groups ?? [];
 	const { fitView } = useReactFlow();
@@ -1115,7 +1222,11 @@ function TopologyGraphInner({ activeEdges, agents }: TopologyGraphInnerProps) {
 
 			// After a drag ends, check if an agent node was dropped onto a group
 			for (const change of changes) {
-				if (change.type === "position" && !change.dragging && groups.length > 0) {
+				if (
+					change.type === "position" &&
+					!change.dragging &&
+					groups.length > 0
+				) {
 					const draggedNode = nodes.find((n) => n.id === change.id);
 					if (!draggedNode || draggedNode.type !== "agent") continue;
 
@@ -1138,9 +1249,7 @@ function TopologyGraphInner({ activeEdges, agents }: TopologyGraphInnerProps) {
 							pos.y > gNode.position.y &&
 							pos.y < gNode.position.y + gh
 						) {
-							const group = groups.find(
-								(g) => `group:${g.name}` === gNode.id,
-							);
+							const group = groups.find((g) => `group:${g.name}` === gNode.id);
 							if (group) {
 								targetGroup = group;
 								break;
@@ -1153,25 +1262,34 @@ function TopologyGraphInner({ activeEdges, agents }: TopologyGraphInnerProps) {
 						const newIds = [...targetGroup.agent_ids, agentId];
 						// Remove from current group if any
 						if (currentGroup && currentGroup.name !== targetGroup.name) {
-							api.updateGroup(currentGroup.name, {
+							api
+								.updateGroup(currentGroup.name, {
+									agent_ids: currentGroup.agent_ids.filter(
+										(id) => id !== agentId,
+									),
+								})
+								.then(() =>
+									queryClient.invalidateQueries({ queryKey: ["topology"] }),
+								);
+						}
+						api
+							.updateGroup(targetGroup.name, {
+								agent_ids: newIds,
+							})
+							.then(() =>
+								queryClient.invalidateQueries({ queryKey: ["topology"] }),
+							);
+					} else if (!targetGroup && currentGroup) {
+						// Dragged out of a group
+						api
+							.updateGroup(currentGroup.name, {
 								agent_ids: currentGroup.agent_ids.filter(
 									(id) => id !== agentId,
 								),
-							}).then(() => queryClient.invalidateQueries({ queryKey: ["topology"] }));
-						}
-						api.updateGroup(targetGroup.name, {
-							agent_ids: newIds,
-						}).then(() => queryClient.invalidateQueries({ queryKey: ["topology"] }));
-					} else if (
-						!targetGroup &&
-						currentGroup
-					) {
-						// Dragged out of a group
-						api.updateGroup(currentGroup.name, {
-							agent_ids: currentGroup.agent_ids.filter(
-								(id) => id !== agentId,
-							),
-						}).then(() => queryClient.invalidateQueries({ queryKey: ["topology"] }));
+							})
+							.then(() =>
+								queryClient.invalidateQueries({ queryKey: ["topology"] }),
+							);
 					}
 				}
 			}
@@ -1198,9 +1316,7 @@ function TopologyGraphInner({ activeEdges, agents }: TopologyGraphInnerProps) {
 	if (error) {
 		return (
 			<div className="flex h-full items-center justify-center">
-				<p className="text-sm text-red-400">
-					Failed to load topology
-				</p>
+				<p className="text-sm text-red-400">Failed to load topology</p>
 			</div>
 		);
 	}
@@ -1208,9 +1324,7 @@ function TopologyGraphInner({ activeEdges, agents }: TopologyGraphInnerProps) {
 	if (!data || data.agents.length === 0) {
 		return (
 			<div className="flex h-full items-center justify-center">
-				<p className="text-sm text-ink-faint">
-					No agents configured
-				</p>
+				<p className="text-sm text-ink-faint">No agents configured</p>
 			</div>
 		);
 	}
@@ -1243,11 +1357,7 @@ function TopologyGraphInner({ activeEdges, agents }: TopologyGraphInnerProps) {
 				proOptions={{ hideAttribution: true }}
 				className="topology-graph"
 			>
-				<Background
-					color="hsla(230, 8%, 14%, 0.5)"
-					gap={20}
-					size={1}
-				/>
+				<Background color="hsla(230, 8%, 14%, 0.5)" gap={20} size={1} />
 				<Controls
 					showInteractive={false}
 					className="!bg-app-darkBox/80 !border-app-line !backdrop-blur-sm [&>button]:!bg-transparent [&>button]:!border-app-line [&>button]:!text-ink-dull [&>button:hover]:!bg-app-hover"
@@ -1421,8 +1531,7 @@ function buildGraph(
 		const memberCount = group.agent_ids.length;
 		const cols = Math.max(1, Math.min(memberCount, 2));
 		const rows = Math.ceil(memberCount / cols);
-		const groupWidth =
-			cols * (NODE_WIDTH + GROUP_PADDING) + GROUP_PADDING;
+		const groupWidth = cols * (NODE_WIDTH + GROUP_PADDING) + GROUP_PADDING;
 		const maxMemberHeight = group.agent_ids.reduce((max, id) => {
 			return Math.max(max, estimateNodeHeight(agentProfiles.get(id)));
 		}, 170);
@@ -1466,7 +1575,10 @@ function buildGraph(
 				type: "agent",
 				position: {
 					x: GROUP_PADDING + col * (NODE_WIDTH + GROUP_PADDING),
-					y: GROUP_HEADER + GROUP_PADDING + row * (maxMemberHeight + GROUP_PADDING),
+					y:
+						GROUP_HEADER +
+						GROUP_PADDING +
+						row * (maxMemberHeight + GROUP_PADDING),
 				},
 				parentId: `group:${group.name}`,
 				extent: "parent" as const,
@@ -1481,7 +1593,12 @@ function buildGraph(
 					isOnline,
 					channelCount: summary?.channel_count ?? 0,
 					memoryCount: summary?.memory_total ?? 0,
-					connectedHandles: { top: false, bottom: false, left: false, right: false },
+					connectedHandles: {
+						top: false,
+						bottom: false,
+						left: false,
+						right: false,
+					},
 				},
 			});
 		});
@@ -1502,8 +1619,7 @@ function buildGraph(
 		const profile = summary?.profile;
 		const isOnline =
 			summary?.last_activity_at != null &&
-			new Date(summary.last_activity_at).getTime() >
-				Date.now() - 5 * 60 * 1000;
+			new Date(summary.last_activity_at).getTime() > Date.now() - 5 * 60 * 1000;
 
 		allNodes.push({
 			id: agent.id,
@@ -1526,16 +1642,22 @@ function buildGraph(
 				isOnline,
 				channelCount: summary?.channel_count ?? 0,
 				memoryCount: summary?.memory_total ?? 0,
-				connectedHandles: { top: false, bottom: false, left: false, right: false },
+				connectedHandles: {
+					top: false,
+					bottom: false,
+					left: false,
+					right: false,
+				},
 			},
 		});
 	});
 
 	// Add human nodes
 	const humans = data.humans ?? [];
-	const humanStartX = ungroupedAgents.length > 0
-		? centerX + radius + NODE_WIDTH + 80
-		: ungroupedStartX;
+	const humanStartX =
+		ungroupedAgents.length > 0
+			? centerX + radius + NODE_WIDTH + 80
+			: ungroupedStartX;
 
 	humans.forEach((human, index) => {
 		allNodes.push({
@@ -1549,7 +1671,12 @@ function buildGraph(
 				configRole: human.role ?? null,
 				bio: human.bio ?? null,
 				avatarSeed: human.id,
-				connectedHandles: { top: false, bottom: false, left: false, right: false },
+				connectedHandles: {
+					top: false,
+					bottom: false,
+					left: false,
+					right: false,
+				},
 			},
 		});
 	});

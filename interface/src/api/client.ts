@@ -154,7 +154,10 @@ export interface TimelineWorkerRun {
 	completed_at: string | null;
 }
 
-export type TimelineItem = TimelineMessage | TimelineBranchRun | TimelineWorkerRun;
+export type TimelineItem =
+	| TimelineMessage
+	| TimelineBranchRun
+	| TimelineWorkerRun;
 
 export interface MessagesResponse {
 	items: TimelineItem[];
@@ -293,8 +296,14 @@ export type MemoryType =
 	| "todo";
 
 export const MEMORY_TYPES: MemoryType[] = [
-	"fact", "preference", "decision", "identity",
-	"event", "observation", "goal", "todo",
+	"fact",
+	"preference",
+	"decision",
+	"identity",
+	"event",
+	"observation",
+	"goal",
+	"todo",
 ];
 
 export type MemorySort = "recent" | "importance" | "most_accessed";
@@ -396,11 +405,19 @@ export type CortexEventType =
 	| "health_check";
 
 export const CORTEX_EVENT_TYPES: CortexEventType[] = [
-	"bulletin_generated", "bulletin_failed",
-	"maintenance_run", "memory_merged", "memory_decayed", "memory_pruned",
-	"association_created", "contradiction_flagged",
-	"worker_killed", "branch_killed", "circuit_breaker_tripped",
-	"observation_created", "health_check",
+	"bulletin_generated",
+	"bulletin_failed",
+	"maintenance_run",
+	"memory_merged",
+	"memory_decayed",
+	"memory_pruned",
+	"association_created",
+	"contradiction_flagged",
+	"worker_killed",
+	"branch_killed",
+	"circuit_breaker_tripped",
+	"observation_created",
+	"health_check",
 ];
 
 export interface CortexEvent {
@@ -1062,16 +1079,26 @@ export const api = {
 	overview: () => fetchJson<InstanceOverviewResponse>("/overview"),
 	agents: () => fetchJson<AgentsResponse>("/agents"),
 	agentOverview: (agentId: string) =>
-		fetchJson<AgentOverviewResponse>(`/agents/overview?agent_id=${encodeURIComponent(agentId)}`),
+		fetchJson<AgentOverviewResponse>(
+			`/agents/overview?agent_id=${encodeURIComponent(agentId)}`,
+		),
 	channels: () => fetchJson<ChannelsResponse>("/channels"),
 	deleteChannel: async (agentId: string, channelId: string) => {
-		const params = new URLSearchParams({ agent_id: agentId, channel_id: channelId });
-		const response = await fetch(`${API_BASE}/channels?${params}`, { method: "DELETE" });
+		const params = new URLSearchParams({
+			agent_id: agentId,
+			channel_id: channelId,
+		});
+		const response = await fetch(`${API_BASE}/channels?${params}`, {
+			method: "DELETE",
+		});
 		if (!response.ok) throw new Error(`API error: ${response.status}`);
 		return response.json() as Promise<{ success: boolean }>;
 	},
 	channelMessages: (channelId: string, limit = 20, before?: string) => {
-		const params = new URLSearchParams({ channel_id: channelId, limit: String(limit) });
+		const params = new URLSearchParams({
+			channel_id: channelId,
+			limit: String(limit),
+		});
 		if (before) params.set("before", before);
 		return fetchJson<MessagesResponse>(`/channels/messages?${params}`);
 	},
@@ -1084,11 +1111,17 @@ export const api = {
 		if (params.sort) search.set("sort", params.sort);
 		return fetchJson<MemoriesListResponse>(`/agents/memories?${search}`);
 	},
-	searchMemories: (agentId: string, query: string, params: MemoriesSearchParams = {}) => {
+	searchMemories: (
+		agentId: string,
+		query: string,
+		params: MemoriesSearchParams = {},
+	) => {
 		const search = new URLSearchParams({ agent_id: agentId, q: query });
 		if (params.limit) search.set("limit", String(params.limit));
 		if (params.memory_type) search.set("memory_type", params.memory_type);
-		return fetchJson<MemoriesSearchResponse>(`/agents/memories/search?${search}`);
+		return fetchJson<MemoriesSearchResponse>(
+			`/agents/memories/search?${search}`,
+		);
 	},
 	memoryGraph: (agentId: string, params: MemoryGraphParams = {}) => {
 		const search = new URLSearchParams({ agent_id: agentId });
@@ -1098,11 +1131,20 @@ export const api = {
 		if (params.sort) search.set("sort", params.sort);
 		return fetchJson<MemoryGraphResponse>(`/agents/memories/graph?${search}`);
 	},
-	memoryGraphNeighbors: (agentId: string, memoryId: string, params: MemoryGraphNeighborsParams = {}) => {
-		const search = new URLSearchParams({ agent_id: agentId, memory_id: memoryId });
+	memoryGraphNeighbors: (
+		agentId: string,
+		memoryId: string,
+		params: MemoryGraphNeighborsParams = {},
+	) => {
+		const search = new URLSearchParams({
+			agent_id: agentId,
+			memory_id: memoryId,
+		});
 		if (params.depth) search.set("depth", String(params.depth));
 		if (params.exclude?.length) search.set("exclude", params.exclude.join(","));
-		return fetchJson<MemoryGraphNeighborsResponse>(`/agents/memories/graph/neighbors?${search}`);
+		return fetchJson<MemoryGraphNeighborsResponse>(
+			`/agents/memories/graph/neighbors?${search}`,
+		);
 	},
 	cortexEvents: (agentId: string, params: CortexEventsParams = {}) => {
 		const search = new URLSearchParams({ agent_id: agentId });
@@ -1112,11 +1154,21 @@ export const api = {
 		return fetchJson<CortexEventsResponse>(`/cortex/events?${search}`);
 	},
 	cortexChatMessages: (agentId: string, threadId?: string, limit = 50) => {
-		const search = new URLSearchParams({ agent_id: agentId, limit: String(limit) });
+		const search = new URLSearchParams({
+			agent_id: agentId,
+			limit: String(limit),
+		});
 		if (threadId) search.set("thread_id", threadId);
-		return fetchJson<CortexChatMessagesResponse>(`/cortex-chat/messages?${search}`);
+		return fetchJson<CortexChatMessagesResponse>(
+			`/cortex-chat/messages?${search}`,
+		);
 	},
-	cortexChatSend: (agentId: string, threadId: string, message: string, channelId?: string) =>
+	cortexChatSend: (
+		agentId: string,
+		threadId: string,
+		message: string,
+		channelId?: string,
+	) =>
 		fetch(`${API_BASE}/cortex-chat/send`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
@@ -1128,9 +1180,13 @@ export const api = {
 			}),
 		}),
 	agentProfile: (agentId: string) =>
-		fetchJson<AgentProfileResponse>(`/agents/profile?agent_id=${encodeURIComponent(agentId)}`),
+		fetchJson<AgentProfileResponse>(
+			`/agents/profile?agent_id=${encodeURIComponent(agentId)}`,
+		),
 	agentIdentity: (agentId: string) =>
-		fetchJson<IdentityFiles>(`/agents/identity?agent_id=${encodeURIComponent(agentId)}`),
+		fetchJson<IdentityFiles>(
+			`/agents/identity?agent_id=${encodeURIComponent(agentId)}`,
+		),
 	updateIdentity: async (request: IdentityUpdateRequest) => {
 		const response = await fetch(`${API_BASE}/agents/identity`, {
 			method: "PUT",
@@ -1146,15 +1202,26 @@ export const api = {
 		const response = await fetch(`${API_BASE}/agents`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ agent_id: agentId, display_name: displayName || undefined, role: role || undefined }),
+			body: JSON.stringify({
+				agent_id: agentId,
+				display_name: displayName || undefined,
+				role: role || undefined,
+			}),
 		});
 		if (!response.ok) {
 			throw new Error(`API error: ${response.status}`);
 		}
-		return response.json() as Promise<{ success: boolean; agent_id: string; message: string }>;
+		return response.json() as Promise<{
+			success: boolean;
+			agent_id: string;
+			message: string;
+		}>;
 	},
 
-	updateAgent: async (agentId: string, update: { display_name?: string; role?: string }) => {
+	updateAgent: async (
+		agentId: string,
+		update: { display_name?: string; role?: string },
+	) => {
 		const response = await fetch(`${API_BASE}/agents`, {
 			method: "PUT",
 			headers: { "Content-Type": "application/json" },
@@ -1163,7 +1230,11 @@ export const api = {
 		if (!response.ok) {
 			throw new Error(`API error: ${response.status}`);
 		}
-		return response.json() as Promise<{ success: boolean; agent_id: string; message: string }>;
+		return response.json() as Promise<{
+			success: boolean;
+			agent_id: string;
+			message: string;
+		}>;
 	},
 
 	deleteAgent: async (agentId: string) => {
@@ -1178,7 +1249,9 @@ export const api = {
 	},
 
 	agentConfig: (agentId: string) =>
-		fetchJson<AgentConfigResponse>(`/agents/config?agent_id=${encodeURIComponent(agentId)}`),
+		fetchJson<AgentConfigResponse>(
+			`/agents/config?agent_id=${encodeURIComponent(agentId)}`,
+		),
 	updateAgentConfig: async (request: AgentConfigUpdateRequest) => {
 		const response = await fetch(`${API_BASE}/agents/config`, {
 			method: "PUT",
@@ -1193,13 +1266,17 @@ export const api = {
 
 	// Cron API
 	listCronJobs: (agentId: string) =>
-		fetchJson<CronListResponse>(`/agents/cron?agent_id=${encodeURIComponent(agentId)}`),
+		fetchJson<CronListResponse>(
+			`/agents/cron?agent_id=${encodeURIComponent(agentId)}`,
+		),
 
 	cronExecutions: (agentId: string, params: CronExecutionsParams = {}) => {
 		const search = new URLSearchParams({ agent_id: agentId });
 		if (params.cron_id) search.set("cron_id", params.cron_id);
 		if (params.limit) search.set("limit", String(params.limit));
-		return fetchJson<CronExecutionsResponse>(`/agents/cron/executions?${search}`);
+		return fetchJson<CronExecutionsResponse>(
+			`/agents/cron/executions?${search}`,
+		);
 	},
 
 	createCronJob: async (agentId: string, request: CreateCronRequest) => {
@@ -1249,11 +1326,19 @@ export const api = {
 		return response.json() as Promise<CronActionResponse>;
 	},
 
-	cancelProcess: async (channelId: string, processType: "worker" | "branch", processId: string) => {
+	cancelProcess: async (
+		channelId: string,
+		processType: "worker" | "branch",
+		processId: string,
+	) => {
 		const response = await fetch(`${API_BASE}/channels/cancel`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ channel_id: channelId, process_type: processType, process_id: processId }),
+			body: JSON.stringify({
+				channel_id: channelId,
+				process_type: processType,
+				process_id: processId,
+			}),
 		});
 		if (!response.ok) {
 			throw new Error(`API error: ${response.status}`);
@@ -1274,7 +1359,11 @@ export const api = {
 		}
 		return response.json() as Promise<ProviderActionResponse>;
 	},
-	testProviderModel: async (provider: string, apiKey: string, model: string) => {
+	testProviderModel: async (
+		provider: string,
+		apiKey: string,
+		model: string,
+	) => {
 		const response = await fetch(`${API_BASE}/providers/test`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
@@ -1285,14 +1374,17 @@ export const api = {
 		}
 		return response.json() as Promise<ProviderModelTestResponse>;
 	},
-	startOpenAiOAuthBrowser: async (params: {model: string}) => {
-		const response = await fetch(`${API_BASE}/providers/openai/oauth/browser/start`, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({
-				model: params.model,
-			}),
-		});
+	startOpenAiOAuthBrowser: async (params: { model: string }) => {
+		const response = await fetch(
+			`${API_BASE}/providers/openai/oauth/browser/start`,
+			{
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					model: params.model,
+				}),
+			},
+		);
 		if (!response.ok) {
 			throw new Error(`API error: ${response.status}`);
 		}
@@ -1308,9 +1400,12 @@ export const api = {
 		return response.json() as Promise<OpenAiOAuthBrowserStatusResponse>;
 	},
 	removeProvider: async (provider: string) => {
-		const response = await fetch(`${API_BASE}/providers/${encodeURIComponent(provider)}`, {
-			method: "DELETE",
-		});
+		const response = await fetch(
+			`${API_BASE}/providers/${encodeURIComponent(provider)}`,
+			{
+				method: "DELETE",
+			},
+		);
 		if (!response.ok) {
 			throw new Error(`API error: ${response.status}`);
 		}
@@ -1318,7 +1413,10 @@ export const api = {
 	},
 
 	// Model listing
-	models: (provider?: string, capability?: "input_audio" | "voice_transcription") => {
+	models: (
+		provider?: string,
+		capability?: "input_audio" | "voice_transcription",
+	) => {
 		const params = new URLSearchParams();
 		if (provider) params.set("provider", provider);
 		if (capability) params.set("capability", capability);
@@ -1337,7 +1435,9 @@ export const api = {
 
 	// Ingest API
 	ingestFiles: (agentId: string) =>
-		fetchJson<IngestFilesResponse>(`/agents/ingest/files?agent_id=${encodeURIComponent(agentId)}`),
+		fetchJson<IngestFilesResponse>(
+			`/agents/ingest/files?agent_id=${encodeURIComponent(agentId)}`,
+		),
 
 	uploadIngestFiles: async (agentId: string, files: File[]) => {
 		const formData = new FormData();
@@ -1355,7 +1455,10 @@ export const api = {
 	},
 
 	deleteIngestFile: async (agentId: string, contentHash: string) => {
-		const params = new URLSearchParams({ agent_id: agentId, content_hash: contentHash });
+		const params = new URLSearchParams({
+			agent_id: agentId,
+			content_hash: contentHash,
+		});
 		const response = await fetch(`${API_BASE}/agents/ingest/files?${params}`, {
 			method: "DELETE",
 		});
@@ -1366,12 +1469,11 @@ export const api = {
 	},
 
 	// Messaging / Bindings API
-	messagingStatus: () => fetchJson<MessagingStatusResponse>("/messaging/status"),
+	messagingStatus: () =>
+		fetchJson<MessagingStatusResponse>("/messaging/status"),
 
 	bindings: (agentId?: string) => {
-		const params = agentId
-			? `?agent_id=${encodeURIComponent(agentId)}`
-			: "";
+		const params = agentId ? `?agent_id=${encodeURIComponent(agentId)}` : "";
 		return fetchJson<BindingsListResponse>(`/bindings${params}`);
 	},
 
@@ -1437,7 +1539,7 @@ export const api = {
 
 	// Global Settings API
 	globalSettings: () => fetchJson<GlobalSettingsResponse>("/settings"),
-	
+
 	updateGlobalSettings: async (settings: GlobalSettingsUpdate) => {
 		const response = await fetch(`${API_BASE}/settings`, {
 			method: "PUT",
@@ -1467,14 +1569,18 @@ export const api = {
 	// Update API
 	updateCheck: () => fetchJson<UpdateStatus>("/update/check"),
 	updateCheckNow: async () => {
-		const response = await fetch(`${API_BASE}/update/check`, { method: "POST" });
+		const response = await fetch(`${API_BASE}/update/check`, {
+			method: "POST",
+		});
 		if (!response.ok) {
 			throw new Error(`API error: ${response.status}`);
 		}
 		return response.json() as Promise<UpdateStatus>;
 	},
 	updateApply: async () => {
-		const response = await fetch(`${API_BASE}/update/apply`, { method: "POST" });
+		const response = await fetch(`${API_BASE}/update/apply`, {
+			method: "POST",
+		});
 		if (!response.ok) {
 			throw new Error(`API error: ${response.status}`);
 		}
@@ -1483,8 +1589,10 @@ export const api = {
 
 	// Skills API
 	listSkills: (agentId: string) =>
-		fetchJson<SkillsListResponse>(`/agents/skills?agent_id=${encodeURIComponent(agentId)}`),
-	
+		fetchJson<SkillsListResponse>(
+			`/agents/skills?agent_id=${encodeURIComponent(agentId)}`,
+		),
+
 	installSkill: async (request: InstallSkillRequest) => {
 		const response = await fetch(`${API_BASE}/agents/skills/install`, {
 			method: "POST",
@@ -1496,7 +1604,7 @@ export const api = {
 		}
 		return response.json() as Promise<InstallSkillResponse>;
 	},
-	
+
 	removeSkill: async (request: RemoveSkillRequest) => {
 		const response = await fetch(`${API_BASE}/agents/skills/remove`, {
 			method: "DELETE",
@@ -1525,7 +1633,9 @@ export const api = {
 	links: () => fetchJson<LinksResponse>("/links"),
 	agentLinks: (agentId: string) =>
 		fetchJson<LinksResponse>(`/agents/${encodeURIComponent(agentId)}/links`),
-	createLink: async (request: CreateLinkRequest): Promise<{ link: AgentLinkResponse }> => {
+	createLink: async (
+		request: CreateLinkRequest,
+	): Promise<{ link: AgentLinkResponse }> => {
 		const response = await fetch(`${API_BASE}/links`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
@@ -1536,7 +1646,11 @@ export const api = {
 		}
 		return response.json();
 	},
-	updateLink: async (from: string, to: string, request: UpdateLinkRequest): Promise<{ link: AgentLinkResponse }> => {
+	updateLink: async (
+		from: string,
+		to: string,
+		request: UpdateLinkRequest,
+	): Promise<{ link: AgentLinkResponse }> => {
 		const response = await fetch(
 			`${API_BASE}/links/${encodeURIComponent(from)}/${encodeURIComponent(to)}`,
 			{
@@ -1562,7 +1676,9 @@ export const api = {
 
 	// Agent Groups API
 	groups: () => fetchJson<{ groups: TopologyGroup[] }>("/groups"),
-	createGroup: async (request: CreateGroupRequest): Promise<{ group: TopologyGroup }> => {
+	createGroup: async (
+		request: CreateGroupRequest,
+	): Promise<{ group: TopologyGroup }> => {
 		const response = await fetch(`${API_BASE}/groups`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
@@ -1573,7 +1689,10 @@ export const api = {
 		}
 		return response.json();
 	},
-	updateGroup: async (name: string, request: UpdateGroupRequest): Promise<{ group: TopologyGroup }> => {
+	updateGroup: async (
+		name: string,
+		request: UpdateGroupRequest,
+	): Promise<{ group: TopologyGroup }> => {
 		const response = await fetch(
 			`${API_BASE}/groups/${encodeURIComponent(name)}`,
 			{
@@ -1599,7 +1718,9 @@ export const api = {
 
 	// Humans API
 	humans: () => fetchJson<{ humans: TopologyHuman[] }>("/humans"),
-	createHuman: async (request: CreateHumanRequest): Promise<{ human: TopologyHuman }> => {
+	createHuman: async (
+		request: CreateHumanRequest,
+	): Promise<{ human: TopologyHuman }> => {
 		const response = await fetch(`${API_BASE}/humans`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
@@ -1610,7 +1731,10 @@ export const api = {
 		}
 		return response.json();
 	},
-	updateHuman: async (id: string, request: UpdateHumanRequest): Promise<{ human: TopologyHuman }> => {
+	updateHuman: async (
+		id: string,
+		request: UpdateHumanRequest,
+	): Promise<{ human: TopologyHuman }> => {
 		const response = await fetch(
 			`${API_BASE}/humans/${encodeURIComponent(id)}`,
 			{
@@ -1635,7 +1759,12 @@ export const api = {
 	},
 
 	// Web Chat API
-	webChatSend: (agentId: string, sessionId: string, message: string, senderName?: string) =>
+	webChatSend: (
+		agentId: string,
+		sessionId: string,
+		message: string,
+		senderName?: string,
+	) =>
 		fetch(`${API_BASE}/webchat/send`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
@@ -1648,7 +1777,9 @@ export const api = {
 		}),
 
 	webChatHistory: (agentId: string, sessionId: string, limit = 100) =>
-		fetch(`${API_BASE}/webchat/history?agent_id=${encodeURIComponent(agentId)}&session_id=${encodeURIComponent(sessionId)}&limit=${limit}`),
+		fetch(
+			`${API_BASE}/webchat/history?agent_id=${encodeURIComponent(agentId)}&session_id=${encodeURIComponent(sessionId)}&limit=${limit}`,
+		),
 
 	eventsUrl: `${API_BASE}/events`,
 };

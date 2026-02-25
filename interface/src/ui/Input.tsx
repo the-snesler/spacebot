@@ -1,8 +1,8 @@
 import * as React from "react";
-import {cva, type VariantProps} from "class-variance-authority";
-import {cx} from "./utils";
-import {Search01Icon} from "@hugeicons/core-free-icons";
-import {HugeiconsIcon} from "@hugeicons/react";
+import { cva, type VariantProps } from "class-variance-authority";
+import { cx } from "./utils";
+import { Search01Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 
 export const inputSizes = {
 	sm: "h-8 text-sm px-3 py-1.5",
@@ -19,7 +19,10 @@ export const inputStyles = cva(
 	{
 		variants: {
 			variant: {
-				default: ["border-app-line bg-app-darkBox", "focus-within:border-accent/50"],
+				default: [
+					"border-app-line bg-app-darkBox",
+					"focus-within:border-accent/50",
+				],
 				transparent: [
 					"border-transparent bg-app-box",
 					"focus-within:border-app-line",
@@ -40,19 +43,18 @@ export const inputStyles = cva(
 type InputVariants = VariantProps<typeof inputStyles>;
 
 export interface InputProps
-	extends
-		Omit<React.InputHTMLAttributes<HTMLInputElement>, "size">,
+	extends Omit<React.InputHTMLAttributes<HTMLInputElement>, "size">,
 		InputVariants {
 	icon?: React.ReactNode;
 	right?: React.ReactNode;
 }
 
 export const Input = React.forwardRef<HTMLInputElement, InputProps>(
-	({className, variant, size, error, icon, right, ...props}, ref) => {
+	({ className, variant, size, error, icon, right, ...props }, ref) => {
 		return (
 			<div
 				className={cx(
-					inputStyles({variant, size, error}),
+					inputStyles({ variant, size, error }),
 					"flex items-center gap-2",
 					className,
 				)}
@@ -72,17 +74,16 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
 Input.displayName = "Input";
 
 export interface TextAreaProps
-	extends
-		React.TextareaHTMLAttributes<HTMLTextAreaElement>,
+	extends React.TextareaHTMLAttributes<HTMLTextAreaElement>,
 		Pick<InputVariants, "variant" | "error"> {}
 
 export const TextArea = React.forwardRef<HTMLTextAreaElement, TextAreaProps>(
-	({className, variant = "default", error, ...props}, ref) => {
+	({ className, variant = "default", error, ...props }, ref) => {
 		return (
 			<textarea
 				ref={ref}
 				className={cx(
-					inputStyles({variant, error}),
+					inputStyles({ variant, error }),
 					"w-full min-h-[80px] resize-y py-2 placeholder:text-ink-faint [&::-webkit-resizer]:bg-transparent",
 					className,
 				)}
@@ -97,7 +98,7 @@ TextArea.displayName = "TextArea";
 export const SearchInput = React.forwardRef<
 	HTMLInputElement,
 	Omit<InputProps, "icon">
->(({size = "sm", ...props}, ref) => (
+>(({ size = "sm", ...props }, ref) => (
 	<Input
 		ref={ref}
 		icon={
@@ -116,7 +117,7 @@ SearchInput.displayName = "SearchInput";
 export const Label = React.forwardRef<
 	HTMLLabelElement,
 	React.LabelHTMLAttributes<HTMLLabelElement>
->(({className, ...props}, ref) => (
+>(({ className, ...props }, ref) => (
 	<label
 		ref={ref}
 		className={cx("block text-xs font-medium text-ink-dull mb-1.5", className)}
@@ -129,7 +130,7 @@ Label.displayName = "Label";
 export const PasswordInput = React.forwardRef<
 	HTMLInputElement,
 	Omit<InputProps, "type" | "right">
->(({...props}, ref) => {
+>(({ ...props }, ref) => {
 	const [show, setShow] = React.useState(false);
 
 	return (

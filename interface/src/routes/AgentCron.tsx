@@ -1,6 +1,10 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, type CronJobWithStats, type CreateCronRequest } from "@/api/client";
+import {
+	api,
+	type CronJobWithStats,
+	type CreateCronRequest,
+} from "@/api/client";
 import { formatDuration, formatTimeAgo } from "@/lib/format";
 import { AnimatePresence, motion } from "framer-motion";
 import { Clock05Icon } from "@hugeicons/core-free-icons";
@@ -28,16 +32,25 @@ import {
 
 function intervalToSeconds(value: number, unit: string): number {
 	switch (unit) {
-		case "minutes": return value * 60;
-		case "hours": return value * 3600;
-		case "days": return value * 86400;
-		default: return value;
+		case "minutes":
+			return value * 60;
+		case "hours":
+			return value * 3600;
+		case "days":
+			return value * 86400;
+		default:
+			return value;
 	}
 }
 
-function secondsToInterval(seconds: number): { value: number; unit: "minutes" | "hours" | "days" } {
-	if (seconds % 86400 === 0 && seconds >= 86400) return { value: seconds / 86400, unit: "days" };
-	if (seconds % 3600 === 0 && seconds >= 3600) return { value: seconds / 3600, unit: "hours" };
+function secondsToInterval(seconds: number): {
+	value: number;
+	unit: "minutes" | "hours" | "days";
+} {
+	if (seconds % 86400 === 0 && seconds >= 86400)
+		return { value: seconds / 86400, unit: "days" };
+	if (seconds % 3600 === 0 && seconds >= 3600)
+		return { value: seconds / 3600, unit: "hours" };
 	return { value: Math.max(1, Math.floor(seconds / 60)), unit: "minutes" };
 }
 
@@ -83,8 +96,12 @@ function jobToFormData(job: CronJobWithStats): CronFormData {
 }
 
 function formDataToRequest(data: CronFormData): CreateCronRequest {
-	const active_start = data.active_start_hour ? parseInt(data.active_start_hour, 10) : undefined;
-	const active_end = data.active_end_hour ? parseInt(data.active_end_hour, 10) : undefined;
+	const active_start = data.active_start_hour
+		? parseInt(data.active_start_hour, 10)
+		: undefined;
+	const active_end = data.active_end_hour
+		? parseInt(data.active_end_hour, 10)
+		: undefined;
 	return {
 		id: data.id,
 		prompt: data.prompt,
@@ -120,12 +137,14 @@ export function AgentCron({ agentId }: AgentCronProps) {
 	const toggleMutation = useMutation({
 		mutationFn: ({ cronId, enabled }: { cronId: string; enabled: boolean }) =>
 			api.toggleCronJob(agentId, cronId, enabled),
-		onSuccess: () => queryClient.invalidateQueries({ queryKey: ["cron-jobs", agentId] }),
+		onSuccess: () =>
+			queryClient.invalidateQueries({ queryKey: ["cron-jobs", agentId] }),
 	});
 
 	const triggerMutation = useMutation({
 		mutationFn: (cronId: string) => api.triggerCronJob(agentId, cronId),
-		onSuccess: () => queryClient.invalidateQueries({ queryKey: ["cron-jobs", agentId] }),
+		onSuccess: () =>
+			queryClient.invalidateQueries({ queryKey: ["cron-jobs", agentId] }),
 	});
 
 	const deleteMutation = useMutation({
@@ -137,7 +156,8 @@ export function AgentCron({ agentId }: AgentCronProps) {
 	});
 
 	const saveMutation = useMutation({
-		mutationFn: (request: CreateCronRequest) => api.createCronJob(agentId, request),
+		mutationFn: (request: CreateCronRequest) =>
+			api.createCronJob(agentId, request),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: ["cron-jobs", agentId] });
 			setIsModalOpen(false);
@@ -165,7 +185,12 @@ export function AgentCron({ agentId }: AgentCronProps) {
 	};
 
 	const handleSave = () => {
-		if (!formData.id.trim() || !formData.prompt.trim() || !formData.delivery_target.trim()) return;
+		if (
+			!formData.id.trim() ||
+			!formData.prompt.trim() ||
+			!formData.delivery_target.trim()
+		)
+			return;
 		saveMutation.mutate(formDataToRequest(formData));
 	};
 
@@ -180,18 +205,31 @@ export function AgentCron({ agentId }: AgentCronProps) {
 
 	const totalJobs = data?.jobs.length ?? 0;
 	const enabledJobs = data?.jobs.filter((j) => j.enabled).length ?? 0;
-	const totalRuns = data?.jobs.reduce((sum, j) => sum + j.success_count + j.failure_count, 0) ?? 0;
-	const failedRuns = data?.jobs.reduce((sum, j) => sum + j.failure_count, 0) ?? 0;
+	const totalRuns =
+		data?.jobs.reduce((sum, j) => sum + j.success_count + j.failure_count, 0) ??
+		0;
+	const failedRuns =
+		data?.jobs.reduce((sum, j) => sum + j.failure_count, 0) ?? 0;
 
 	return (
 		<div className="flex h-full flex-col">
 			{/* Stats bar */}
 			{totalJobs > 0 && (
 				<div className="flex items-center gap-2 border-b border-app-line px-6 py-3">
-					<Badge variant="accent" size="md">{totalJobs} total</Badge>
-					<Badge variant="green" size="md">{enabledJobs} enabled</Badge>
-					<Badge variant="outline" size="md">{totalRuns} runs</Badge>
-					{failedRuns > 0 && <Badge variant="red" size="md">{failedRuns} failed</Badge>}
+					<Badge variant="accent" size="md">
+						{totalJobs} total
+					</Badge>
+					<Badge variant="green" size="md">
+						{enabledJobs} enabled
+					</Badge>
+					<Badge variant="outline" size="md">
+						{totalRuns} runs
+					</Badge>
+					{failedRuns > 0 && (
+						<Badge variant="red" size="md">
+							{failedRuns} failed
+						</Badge>
+					)}
 
 					<div className="flex-1" />
 
@@ -219,11 +257,17 @@ export function AgentCron({ agentId }: AgentCronProps) {
 					<div className="flex h-full items-start justify-center pt-[15vh]">
 						<div className="flex max-w-sm flex-col items-center rounded-xl border border-dashed border-app-line/50 bg-app-darkBox/20 p-8 text-center">
 							<div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full border border-app-line bg-app-darkBox">
-								<HugeiconsIcon icon={Clock05Icon} className="h-6 w-6 text-ink-faint" />
+								<HugeiconsIcon
+									icon={Clock05Icon}
+									className="h-6 w-6 text-ink-faint"
+								/>
 							</div>
-							<h3 className="mb-1 font-plex text-sm font-medium text-ink">No cron jobs yet</h3>
+							<h3 className="mb-1 font-plex text-sm font-medium text-ink">
+								No cron jobs yet
+							</h3>
 							<p className="mb-5 max-w-md text-sm text-ink-faint">
-								Schedule automated tasks that run on a timer and deliver results to messaging channels
+								Schedule automated tasks that run on a timer and deliver results
+								to messaging channels
 							</p>
 							<Button onClick={openCreate} variant="secondary" size="sm">
 								+ New Job
@@ -242,7 +286,10 @@ export function AgentCron({ agentId }: AgentCronProps) {
 								isExpanded={expandedJobs.has(job.id)}
 								onToggleExpand={() => toggleExpanded(job.id)}
 								onToggleEnabled={() =>
-									toggleMutation.mutate({ cronId: job.id, enabled: !job.enabled })
+									toggleMutation.mutate({
+										cronId: job.id,
+										enabled: !job.enabled,
+									})
 								}
 								onTrigger={() => triggerMutation.mutate(job.id)}
 								onEdit={() => openEdit(job)}
@@ -259,13 +306,17 @@ export function AgentCron({ agentId }: AgentCronProps) {
 			<Dialog open={isModalOpen} onOpenChange={(open) => !open && closeModal()}>
 				<DialogContent>
 					<DialogHeader>
-						<DialogTitle>{editingJob ? "Edit Cron Job" : "Create Cron Job"}</DialogTitle>
+						<DialogTitle>
+							{editingJob ? "Edit Cron Job" : "Create Cron Job"}
+						</DialogTitle>
 					</DialogHeader>
 					<div className="flex flex-col gap-4">
 						<Field label="Job ID">
 							<Input
 								value={formData.id}
-								onChange={(e) => setFormData((d) => ({ ...d, id: e.target.value }))}
+								onChange={(e) =>
+									setFormData((d) => ({ ...d, id: e.target.value }))
+								}
 								placeholder="e.g. check-email"
 								disabled={!!editingJob}
 								autoComplete="off"
@@ -275,7 +326,9 @@ export function AgentCron({ agentId }: AgentCronProps) {
 						<Field label="Prompt">
 							<TextArea
 								value={formData.prompt}
-								onChange={(e) => setFormData((d) => ({ ...d, prompt: e.target.value }))}
+								onChange={(e) =>
+									setFormData((d) => ({ ...d, prompt: e.target.value }))
+								}
 								placeholder="What should the agent do on each run?"
 								rows={3}
 							/>
@@ -286,7 +339,9 @@ export function AgentCron({ agentId }: AgentCronProps) {
 								<span className="text-sm text-ink-faint">Every</span>
 								<NumberStepper
 									value={formData.interval_value}
-									onChange={(v) => setFormData((d) => ({ ...d, interval_value: v }))}
+									onChange={(v) =>
+										setFormData((d) => ({ ...d, interval_value: v }))
+									}
 									min={1}
 									max={999}
 									variant="compact"
@@ -295,7 +350,10 @@ export function AgentCron({ agentId }: AgentCronProps) {
 								<Select
 									value={formData.interval_unit}
 									onValueChange={(value) =>
-										setFormData((d) => ({ ...d, interval_unit: value as "minutes" | "hours" | "days" }))
+										setFormData((d) => ({
+											...d,
+											interval_unit: value as "minutes" | "hours" | "days",
+										}))
 									}
 								>
 									<SelectTrigger className="w-32">
@@ -308,15 +366,21 @@ export function AgentCron({ agentId }: AgentCronProps) {
 									</SelectContent>
 								</Select>
 							</div>
-							<p className="mt-1 text-tiny text-ink-faint">How often this job should run</p>
+							<p className="mt-1 text-tiny text-ink-faint">
+								How often this job should run
+							</p>
 						</Field>
 
 						<div className="grid grid-cols-2 gap-4">
-
 							<Field label="Delivery Target">
 								<Input
 									value={formData.delivery_target}
-									onChange={(e) => setFormData((d) => ({ ...d, delivery_target: e.target.value }))}
+									onChange={(e) =>
+										setFormData((d) => ({
+											...d,
+											delivery_target: e.target.value,
+										}))
+									}
 									placeholder="discord:channel_id"
 								/>
 							</Field>
@@ -326,7 +390,12 @@ export function AgentCron({ agentId }: AgentCronProps) {
 							<div className="flex items-center gap-2">
 								<NumberStepper
 									value={parseInt(formData.active_start_hour) || 0}
-									onChange={(v) => setFormData((d) => ({ ...d, active_start_hour: v.toString() }))}
+									onChange={(v) =>
+										setFormData((d) => ({
+											...d,
+											active_start_hour: v.toString(),
+										}))
+									}
 									min={0}
 									max={23}
 									suffix="h"
@@ -335,51 +404,81 @@ export function AgentCron({ agentId }: AgentCronProps) {
 								<span className="text-sm text-ink-faint">to</span>
 								<NumberStepper
 									value={parseInt(formData.active_end_hour) || 23}
-									onChange={(v) => setFormData((d) => ({ ...d, active_end_hour: v.toString() }))}
+									onChange={(v) =>
+										setFormData((d) => ({
+											...d,
+											active_end_hour: v.toString(),
+										}))
+									}
 									min={0}
 									max={23}
 									suffix="h"
 									variant="compact"
 								/>
 							</div>
-							<p className="mt-1 text-tiny text-ink-faint">Job will only run during these hours (0-23, 24-hour format)</p>
+							<p className="mt-1 text-tiny text-ink-faint">
+								Job will only run during these hours (0-23, 24-hour format)
+							</p>
 						</Field>
 
 						<div className="flex items-center justify-between">
 							<Label>Enabled</Label>
-							<Toggle checked={formData.enabled} onCheckedChange={(checked) => setFormData((d) => ({ ...d, enabled: checked }))} size="lg" />
+							<Toggle
+								checked={formData.enabled}
+								onCheckedChange={(checked) =>
+									setFormData((d) => ({ ...d, enabled: checked }))
+								}
+								size="lg"
+							/>
 						</div>
 
 						<div className="flex items-center justify-between">
 							<Label>Run Once</Label>
-							<Toggle checked={formData.run_once} onCheckedChange={(checked) => setFormData((d) => ({ ...d, run_once: checked }))} size="lg" />
+							<Toggle
+								checked={formData.run_once}
+								onCheckedChange={(checked) =>
+									setFormData((d) => ({ ...d, run_once: checked }))
+								}
+								size="lg"
+							/>
 						</div>
 
-					<div className="mt-2 flex justify-end gap-2">
-						<Button variant="ghost" size="sm" onClick={closeModal}>
-							Cancel
-						</Button>
-						<Button
-							size="sm"
-							onClick={handleSave}
-							disabled={!formData.id.trim() || !formData.prompt.trim() || !formData.delivery_target.trim()}
-							loading={saveMutation.isPending}
-						>
-							{editingJob ? "Save Changes" : "Create Job"}
-						</Button>
-					</div>
+						<div className="mt-2 flex justify-end gap-2">
+							<Button variant="ghost" size="sm" onClick={closeModal}>
+								Cancel
+							</Button>
+							<Button
+								size="sm"
+								onClick={handleSave}
+								disabled={
+									!formData.id.trim() ||
+									!formData.prompt.trim() ||
+									!formData.delivery_target.trim()
+								}
+								loading={saveMutation.isPending}
+							>
+								{editingJob ? "Save Changes" : "Create Job"}
+							</Button>
+						</div>
 					</div>
 				</DialogContent>
 			</Dialog>
 
 			{/* Delete Confirmation */}
-			<Dialog open={!!deleteConfirmId} onOpenChange={(open) => !open && setDeleteConfirmId(null)}>
+			<Dialog
+				open={!!deleteConfirmId}
+				onOpenChange={(open) => !open && setDeleteConfirmId(null)}
+			>
 				<DialogContent>
 					<DialogHeader>
 						<DialogTitle>Delete Cron Job?</DialogTitle>
 					</DialogHeader>
 					<p className="mb-4 text-sm text-ink-dull">
-						This will permanently delete <code className="rounded bg-app-darkBox px-1.5 py-0.5 text-ink">{deleteConfirmId}</code> and its execution history.
+						This will permanently delete{" "}
+						<code className="rounded bg-app-darkBox px-1.5 py-0.5 text-ink">
+							{deleteConfirmId}
+						</code>{" "}
+						and its execution history.
 					</p>
 					<div className="flex justify-end gap-2">
 						<Button
@@ -392,7 +491,9 @@ export function AgentCron({ agentId }: AgentCronProps) {
 						<Button
 							variant="destructive"
 							size="sm"
-							onClick={() => deleteConfirmId && deleteMutation.mutate(deleteConfirmId)}
+							onClick={() =>
+								deleteConfirmId && deleteMutation.mutate(deleteConfirmId)
+							}
 							loading={deleteMutation.isPending}
 						>
 							Delete
@@ -406,7 +507,13 @@ export function AgentCron({ agentId }: AgentCronProps) {
 
 // -- Sub-components --
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+	label,
+	children,
+}: {
+	label: string;
+	children: React.ReactNode;
+}) {
 	return (
 		<div className="space-y-1.5">
 			<label className="text-xs font-medium text-ink-dull">{label}</label>
@@ -439,7 +546,8 @@ function CronJobCard({
 	isTriggering: boolean;
 }) {
 	const totalRuns = job.success_count + job.failure_count;
-	const successRate = totalRuns > 0 ? Math.round((job.success_count / totalRuns) * 100) : null;
+	const successRate =
+		totalRuns > 0 ? Math.round((job.success_count / totalRuns) * 100) : null;
 
 	return (
 		<div className="overflow-hidden rounded-xl border border-app-line bg-app-darkBox">
@@ -460,19 +568,26 @@ function CronJobCard({
 						</code>
 						{job.active_hours && (
 							<span className="text-tiny text-ink-faint">
-								{String(job.active_hours[0]).padStart(2, "0")}:00–{String(job.active_hours[1]).padStart(2, "0")}:00
+								{String(job.active_hours[0]).padStart(2, "0")}:00–
+								{String(job.active_hours[1]).padStart(2, "0")}:00
 							</span>
 						)}
 						{!job.enabled && (
-							<span className="rounded bg-gray-500/20 px-1.5 py-0.5 text-tiny text-gray-400">disabled</span>
+							<span className="rounded bg-gray-500/20 px-1.5 py-0.5 text-tiny text-gray-400">
+								disabled
+							</span>
 						)}
 						{job.run_once && (
-							<span className="rounded bg-accent/20 px-1.5 py-0.5 text-tiny text-accent">one-time</span>
+							<span className="rounded bg-accent/20 px-1.5 py-0.5 text-tiny text-accent">
+								one-time
+							</span>
 						)}
 					</div>
 
 					<p className="mb-2 text-sm text-ink-dull" title={job.prompt}>
-						{job.prompt.length > 120 ? job.prompt.slice(0, 120) + "..." : job.prompt}
+						{job.prompt.length > 120
+							? job.prompt.slice(0, 120) + "..."
+							: job.prompt}
 					</p>
 
 					<div className="flex flex-wrap items-center gap-3 text-tiny text-ink-faint">
@@ -488,7 +603,15 @@ function CronJobCard({
 						{successRate !== null && (
 							<>
 								<span className="text-ink-faint/50">·</span>
-								<span className={successRate >= 90 ? "text-green-500" : successRate >= 50 ? "text-yellow-500" : "text-red-500"}>
+								<span
+									className={
+										successRate >= 90
+											? "text-green-500"
+											: successRate >= 50
+												? "text-yellow-500"
+												: "text-red-500"
+									}
+								>
 									{successRate}% success ({job.success_count}/{totalRuns})
 								</span>
 							</>
@@ -512,8 +635,14 @@ function CronJobCard({
 					>
 						⚡
 					</ActionButton>
-					<ActionButton title="Edit" onClick={onEdit}>✎</ActionButton>
-					<ActionButton title="Delete" onClick={onDelete} className="hover:text-red-400">
+					<ActionButton title="Edit" onClick={onEdit}>
+						✎
+					</ActionButton>
+					<ActionButton
+						title="Delete"
+						onClick={onDelete}
+						className="hover:text-red-400"
+					>
 						✕
 					</ActionButton>
 				</div>
@@ -581,7 +710,9 @@ function JobExecutions({ agentId, jobId }: { agentId: string; jobId: string }) {
 	}
 
 	if (!data?.executions.length) {
-		return <p className="py-2 text-tiny text-ink-faint">No execution history yet.</p>;
+		return (
+			<p className="py-2 text-tiny text-ink-faint">No execution history yet.</p>
+		);
 	}
 
 	return (
@@ -591,7 +722,9 @@ function JobExecutions({ agentId, jobId }: { agentId: string; jobId: string }) {
 					key={execution.id}
 					className="flex items-center gap-3 rounded-lg px-3 py-1.5"
 				>
-					<span className={`text-xs ${execution.success ? "text-green-500" : "text-red-500"}`}>
+					<span
+						className={`text-xs ${execution.success ? "text-green-500" : "text-red-500"}`}
+					>
 						{execution.success ? "✓" : "✗"}
 					</span>
 					<span className="text-tiny tabular-nums text-ink-faint">

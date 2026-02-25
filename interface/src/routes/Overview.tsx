@@ -1,32 +1,32 @@
-import {useMemo, useState} from "react";
-import {useQuery} from "@tanstack/react-query";
-import {api} from "@/api/client";
-import {CreateAgentDialog} from "@/components/CreateAgentDialog";
-import {TopologyGraph} from "@/components/TopologyGraph";
-import type {ChannelLiveState} from "@/hooks/useChannelLiveState";
-import {formatUptime} from "@/lib/format";
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/api/client";
+import { CreateAgentDialog } from "@/components/CreateAgentDialog";
+import { TopologyGraph } from "@/components/TopologyGraph";
+import type { ChannelLiveState } from "@/hooks/useChannelLiveState";
+import { formatUptime } from "@/lib/format";
 
 interface OverviewProps {
 	liveStates: Record<string, ChannelLiveState>;
 	activeLinks?: Set<string>;
 }
 
-export function Overview({liveStates, activeLinks}: OverviewProps) {
+export function Overview({ liveStates, activeLinks }: OverviewProps) {
 	const [createOpen, setCreateOpen] = useState(false);
 
-	const {data: statusData} = useQuery({
+	const { data: statusData } = useQuery({
 		queryKey: ["status"],
 		queryFn: api.status,
 		refetchInterval: 5000,
 	});
 
-	const {data: overviewData, isLoading: overviewLoading} = useQuery({
+	const { data: overviewData, isLoading: overviewLoading } = useQuery({
 		queryKey: ["overview"],
 		queryFn: api.overview,
 		refetchInterval: 10_000,
 	});
 
-	const {data: channelsData} = useQuery({
+	const { data: channelsData } = useQuery({
 		queryKey: ["channels"],
 		queryFn: api.channels,
 		refetchInterval: 10000,
@@ -43,7 +43,7 @@ export function Overview({liveStates, activeLinks}: OverviewProps) {
 			workers += Object.keys(state.workers).length;
 			branches += Object.keys(state.branches).length;
 		}
-		return {workers, branches};
+		return { workers, branches };
 	}, [liveStates]);
 
 	const uptime = statusData?.uptime_seconds ?? 0;

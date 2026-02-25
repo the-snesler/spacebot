@@ -8,13 +8,11 @@ export { FormProvider, useFormContext, useFormState };
 export const Form = FormProvider;
 
 export interface ErrorMessageProps {
-  error?: string;
-  className?: string;
+	error?: string;
+	className?: string;
 }
 
 export const ErrorMessage = ({ error, className }: ErrorMessageProps) => {
-  if (!error) return null;
-  return (
-    <p className={cx("text-xs text-red-500 mt-1", className)}>{error}</p>
-  );
+	if (!error) return null;
+	return <p className={cx("text-xs text-red-500 mt-1", className)}>{error}</p>;
 };

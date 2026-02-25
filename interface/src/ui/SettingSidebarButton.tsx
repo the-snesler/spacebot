@@ -18,7 +18,7 @@ export const SettingSidebarButton = React.forwardRef<
 			active
 				? "bg-app-darkBox text-ink"
 				: "text-ink-dull hover:bg-app-darkBox/50 hover:text-ink",
-			className
+			className,
 		)}
 		{...props}
 	>

@@ -1,8 +1,19 @@
-import { createContext, useContext, useCallback, useRef, useState, useMemo, type ReactNode } from "react";
+import {
+	createContext,
+	useContext,
+	useCallback,
+	useRef,
+	useState,
+	useMemo,
+	type ReactNode,
+} from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type AgentMessageEvent, type ChannelInfo } from "@/api/client";
 import { useEventSource, type ConnectionState } from "@/hooks/useEventSource";
-import { useChannelLiveState, type ChannelLiveState } from "@/hooks/useChannelLiveState";
+import {
+	useChannelLiveState,
+	type ChannelLiveState,
+} from "@/hooks/useChannelLiveState";
 
 interface LiveContextValue {
 	liveStates: Record<string, ChannelLiveState>;
@@ -40,11 +51,18 @@ export function LiveContextProvider({ children }: { children: ReactNode }) {
 	});
 
 	const channels = channelsData?.channels ?? [];
-	const { liveStates, handlers: channelHandlers, syncStatusSnapshot, loadOlderMessages } = useChannelLiveState(channels);
+	const {
+		liveStates,
+		handlers: channelHandlers,
+		syncStatusSnapshot,
+		loadOlderMessages,
+	} = useChannelLiveState(channels);
 
 	// Track recently active link edges
 	const [activeLinks, setActiveLinks] = useState<Set<string>>(new Set());
-	const timersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+	const timersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
+		new Map(),
+	);
 
 	const markEdgeActive = useCallback((from: string, to: string) => {
 		// Activate both directions since the topology edge may be defined either way
@@ -111,7 +129,16 @@ export function LiveContextProvider({ children }: { children: ReactNode }) {
 	const hasData = channels.length > 0 || channelsData !== undefined;
 
 	return (
-		<LiveContext.Provider value={{ liveStates, channels, connectionState, hasData, loadOlderMessages, activeLinks }}>
+		<LiveContext.Provider
+			value={{
+				liveStates,
+				channels,
+				connectionState,
+				hasData,
+				loadOlderMessages,
+				activeLinks,
+			}}
+		>
 			{children}
 		</LiveContext.Provider>
 	);

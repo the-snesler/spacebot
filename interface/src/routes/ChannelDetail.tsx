@@ -1,8 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "framer-motion";
-import { api, type ChannelInfo, type TimelineItem, type TimelineBranchRun, type TimelineWorkerRun } from "@/api/client";
-import type { ChannelLiveState, ActiveWorker, ActiveBranch } from "@/hooks/useChannelLiveState";
+import {
+	api,
+	type ChannelInfo,
+	type TimelineItem,
+	type TimelineBranchRun,
+	type TimelineWorkerRun,
+} from "@/api/client";
+import type {
+	ChannelLiveState,
+	ActiveWorker,
+	ActiveBranch,
+} from "@/hooks/useChannelLiveState";
 import { CortexChatPanel } from "@/components/CortexChatPanel";
 import { LiveDuration } from "@/components/LiveDuration";
 import { Markdown } from "@/components/Markdown";
@@ -40,7 +50,15 @@ function CancelButton({ onClick }: { onClick: () => void }) {
 	);
 }
 
-function LiveBranchRunItem({ item, live, channelId }: { item: TimelineBranchRun; live: ActiveBranch; channelId: string }) {
+function LiveBranchRunItem({
+	item,
+	live,
+	channelId,
+}: {
+	item: TimelineBranchRun;
+	live: ActiveBranch;
+	channelId: string;
+}) {
 	const displayTool = live.currentTool ?? live.lastTool;
 	return (
 		<div className="flex gap-3 px-3 py-2">
@@ -52,17 +70,29 @@ function LiveBranchRunItem({ item, live, channelId }: { item: TimelineBranchRun;
 					<div className="flex items-center gap-2">
 						<div className="h-2 w-2 animate-pulse rounded-full bg-violet-400" />
 						<span className="text-sm font-medium text-violet-300">Branch</span>
-						<span className="truncate text-sm text-ink-dull">{item.description}</span>
-						<CancelButton onClick={() => { api.cancelProcess(channelId, "branch", item.id).catch(console.warn); }} />
+						<span className="truncate text-sm text-ink-dull">
+							{item.description}
+						</span>
+						<CancelButton
+							onClick={() => {
+								api
+									.cancelProcess(channelId, "branch", item.id)
+									.catch(console.warn);
+							}}
+						/>
 					</div>
 					<div className="mt-1 flex items-center gap-3 pl-4 text-tiny text-ink-faint">
 						<LiveDuration startMs={live.startedAt} />
 						{displayTool && (
-							<span className={live.currentTool ? "text-violet-400/70" : "text-violet-400/40"}>{displayTool}</span>
+							<span
+								className={
+									live.currentTool ? "text-violet-400/70" : "text-violet-400/40"
+								}
+							>
+								{displayTool}
+							</span>
 						)}
-						{live.toolCalls > 0 && (
-							<span>{live.toolCalls} tool calls</span>
-						)}
+						{live.toolCalls > 0 && <span>{live.toolCalls} tool calls</span>}
 					</div>
 				</div>
 			</div>
@@ -70,7 +100,15 @@ function LiveBranchRunItem({ item, live, channelId }: { item: TimelineBranchRun;
 	);
 }
 
-function LiveWorkerRunItem({ item, live, channelId }: { item: TimelineWorkerRun; live: ActiveWorker; channelId: string }) {
+function LiveWorkerRunItem({
+	item,
+	live,
+	channelId,
+}: {
+	item: TimelineWorkerRun;
+	live: ActiveWorker;
+	channelId: string;
+}) {
 	return (
 		<div className="flex gap-3 px-3 py-2">
 			<span className="flex-shrink-0 pt-0.5 text-tiny text-ink-faint">
@@ -81,17 +119,25 @@ function LiveWorkerRunItem({ item, live, channelId }: { item: TimelineWorkerRun;
 					<div className="flex min-w-0 items-center gap-2 overflow-hidden">
 						<div className="h-2 w-2 animate-pulse rounded-full bg-amber-400" />
 						<span className="text-sm font-medium text-amber-300">Worker</span>
-						<span className="min-w-0 flex-1 truncate text-sm text-ink-dull">{item.task}</span>
-						<CancelButton onClick={() => { api.cancelProcess(channelId, "worker", item.id).catch(console.warn); }} />
+						<span className="min-w-0 flex-1 truncate text-sm text-ink-dull">
+							{item.task}
+						</span>
+						<CancelButton
+							onClick={() => {
+								api
+									.cancelProcess(channelId, "worker", item.id)
+									.catch(console.warn);
+							}}
+						/>
 					</div>
 					<div className="mt-1 flex min-w-0 items-center gap-3 overflow-hidden pl-4 text-tiny text-ink-faint">
 						<span className="truncate">{live.status}</span>
 						{live.currentTool && (
-							<span className="truncate text-amber-400/70">{live.currentTool}</span>
+							<span className="truncate text-amber-400/70">
+								{live.currentTool}
+							</span>
 						)}
-						{live.toolCalls > 0 && (
-							<span>{live.toolCalls} tool calls</span>
-						)}
+						{live.toolCalls > 0 && <span>{live.toolCalls} tool calls</span>}
 					</div>
 				</div>
 			</div>
@@ -117,7 +163,9 @@ function BranchRunItem({ item }: { item: TimelineBranchRun }) {
 					<div className="flex items-center gap-2">
 						<div className="h-2 w-2 rounded-full bg-violet-400/50" />
 						<span className="text-sm font-medium text-violet-300">Branch</span>
-						<span className="truncate text-sm text-ink-dull">{item.description}</span>
+						<span className="truncate text-sm text-ink-dull">
+							{item.description}
+						</span>
 						{item.conclusion && (
 							<span className="ml-auto text-tiny text-ink-faint">
 								{expanded ? "▾" : "▸"}
@@ -154,7 +202,9 @@ function WorkerRunItem({ item }: { item: TimelineWorkerRun }) {
 					<div className="flex min-w-0 items-center gap-2 overflow-hidden">
 						<div className="h-2 w-2 rounded-full bg-amber-400/50" />
 						<span className="text-sm font-medium text-amber-300">Worker</span>
-						<span className="min-w-0 flex-1 truncate text-sm text-ink-dull">{item.task}</span>
+						<span className="min-w-0 flex-1 truncate text-sm text-ink-dull">
+							{item.task}
+						</span>
 						{item.result && (
 							<span className="ml-auto text-tiny text-ink-faint">
 								{expanded ? "▾" : "▸"}
@@ -174,7 +224,12 @@ function WorkerRunItem({ item }: { item: TimelineWorkerRun }) {
 	);
 }
 
-function TimelineEntry({ item, liveWorkers, liveBranches, channelId }: {
+function TimelineEntry({
+	item,
+	liveWorkers,
+	liveBranches,
+	channelId,
+}: {
 	item: TimelineItem;
 	liveWorkers: Record<string, ActiveWorker>;
 	liveBranches: Record<string, ActiveBranch>;
@@ -192,10 +247,14 @@ function TimelineEntry({ item, liveWorkers, liveBranches, channelId }: {
 						{formatTimestamp(new Date(item.created_at).getTime())}
 					</span>
 					<div className="min-w-0 flex-1">
-						<span className={`text-sm font-medium ${
-							item.role === "user" ? "text-accent-faint" : "text-green-400"
-						}`}>
-							{item.role === "user" ? (item.sender_name ?? "user") : (item.sender_name ?? "bot")}
+						<span
+							className={`text-sm font-medium ${
+								item.role === "user" ? "text-accent-faint" : "text-green-400"
+							}`}
+						>
+							{item.role === "user"
+								? (item.sender_name ?? "user")
+								: (item.sender_name ?? "bot")}
 						</span>
 						<div className="mt-0.5 text-sm text-ink-dull">
 							<Markdown>{item.content}</Markdown>
@@ -205,18 +264,30 @@ function TimelineEntry({ item, liveWorkers, liveBranches, channelId }: {
 			);
 		case "branch_run": {
 			const live = liveBranches[item.id];
-			if (live) return <LiveBranchRunItem item={item} live={live} channelId={channelId} />;
+			if (live)
+				return (
+					<LiveBranchRunItem item={item} live={live} channelId={channelId} />
+				);
 			return <BranchRunItem item={item} />;
 		}
 		case "worker_run": {
 			const live = liveWorkers[item.id];
-			if (live) return <LiveWorkerRunItem item={item} live={live} channelId={channelId} />;
+			if (live)
+				return (
+					<LiveWorkerRunItem item={item} live={live} channelId={channelId} />
+				);
 			return <WorkerRunItem item={item} />;
 		}
 	}
 }
 
-export function ChannelDetail({ agentId, channelId, channel, liveState, onLoadMore }: ChannelDetailProps) {
+export function ChannelDetail({
+	agentId,
+	channelId,
+	channel,
+	liveState,
+	onLoadMore,
+}: ChannelDetailProps) {
 	const timeline = liveState?.timeline ?? [];
 	const hasMore = liveState?.hasMore ?? false;
 	const loadingMore = liveState?.loadingMore ?? false;
@@ -232,11 +303,14 @@ export function ChannelDetail({ agentId, channelId, channel, liveState, onLoadMo
 	const sentinelRef = useRef<HTMLDivElement>(null);
 
 	// Trigger load when the sentinel at the top of the timeline becomes visible
-	const handleIntersection = useCallback((entries: IntersectionObserverEntry[]) => {
-		if (entries[0]?.isIntersecting && hasMore && !loadingMore) {
-			onLoadMore();
-		}
-	}, [hasMore, loadingMore, onLoadMore]);
+	const handleIntersection = useCallback(
+		(entries: IntersectionObserverEntry[]) => {
+			if (entries[0]?.isIntersecting && hasMore && !loadingMore) {
+				onLoadMore();
+			}
+		},
+		[hasMore, loadingMore, onLoadMore],
+	);
 
 	useEffect(() => {
 		const sentinel = sentinelRef.current;
@@ -267,7 +341,9 @@ export function ChannelDetail({ agentId, channelId, channel, liveState, onLoadMo
 						{channel?.display_name ?? channelId}
 					</span>
 					{channel && (
-						<span className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-tiny font-medium ${platformColor(channel.platform)}`}>
+						<span
+							className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-tiny font-medium ${platformColor(channel.platform)}`}
+						>
 							{platformIcon(channel.platform)}
 						</span>
 					)}
@@ -280,7 +356,8 @@ export function ChannelDetail({ agentId, channelId, channel, liveState, onLoadMo
 									<div className="flex items-center gap-1.5">
 										<div className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400" />
 										<span className="text-tiny text-amber-300">
-											{activeWorkerCount} worker{activeWorkerCount !== 1 ? "s" : ""}
+											{activeWorkerCount} worker
+											{activeWorkerCount !== 1 ? "s" : ""}
 										</span>
 									</div>
 								)}
@@ -288,7 +365,8 @@ export function ChannelDetail({ agentId, channelId, channel, liveState, onLoadMo
 									<div className="flex items-center gap-1.5">
 										<div className="h-1.5 w-1.5 animate-pulse rounded-full bg-violet-400" />
 										<span className="text-tiny text-violet-300">
-											{activeBranchCount} branch{activeBranchCount !== 1 ? "es" : ""}
+											{activeBranchCount} branch
+											{activeBranchCount !== 1 ? "es" : ""}
 										</span>
 									</div>
 								)}
@@ -302,31 +380,38 @@ export function ChannelDetail({ agentId, channelId, channel, liveState, onLoadMo
 								<span className="ml-1 text-tiny text-ink-faint">typing</span>
 							</div>
 						)}
-					<Button
-						onClick={() => setCortexOpen(!cortexOpen)}
-						variant={cortexOpen ? "secondary" : "ghost"}
-						size="icon"
-						className={`h-8 w-8 ${cortexOpen ? "bg-violet-500/20 text-violet-400" : ""}`}
-						title="Toggle cortex chat"
-					>
-						<HugeiconsIcon icon={IdeaIcon} className="h-4 w-4" />
-					</Button>
+						<Button
+							onClick={() => setCortexOpen(!cortexOpen)}
+							variant={cortexOpen ? "secondary" : "ghost"}
+							size="icon"
+							className={`h-8 w-8 ${cortexOpen ? "bg-violet-500/20 text-violet-400" : ""}`}
+							title="Toggle cortex chat"
+						>
+							<HugeiconsIcon icon={IdeaIcon} className="h-4 w-4" />
+						</Button>
 					</div>
 				</div>
 
 				{/* Timeline — flex-col-reverse keeps scroll pinned to bottom */}
-				<div ref={scrollRef} className="flex flex-1 flex-col-reverse overflow-y-auto">
+				<div
+					ref={scrollRef}
+					className="flex flex-1 flex-col-reverse overflow-y-auto"
+				>
 					<div className="flex flex-col gap-1 p-6">
 						{/* Sentinel for infinite scroll — sits above the oldest item */}
 						<div ref={sentinelRef} className="h-px" />
 						{loadingMore && (
 							<div className="flex justify-center py-3">
-								<span className="text-tiny text-ink-faint">Loading older messages...</span>
+								<span className="text-tiny text-ink-faint">
+									Loading older messages...
+								</span>
 							</div>
 						)}
 						{!hasMore && timeline.length > 0 && (
 							<div className="flex justify-center py-3">
-								<span className="text-tiny text-ink-faint/50">Beginning of conversation</span>
+								<span className="text-tiny text-ink-faint/50">
+									Beginning of conversation
+								</span>
 							</div>
 						)}
 						{timeline.length === 0 ? (
@@ -348,7 +433,9 @@ export function ChannelDetail({ agentId, channelId, channel, liveState, onLoadMo
 									{formatTimestamp(Date.now())}
 								</span>
 								<div className="flex items-center gap-1.5">
-									<span className="text-sm font-medium text-green-400">bot</span>
+									<span className="text-sm font-medium text-green-400">
+										bot
+									</span>
 									<span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-ink-faint" />
 									<span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-ink-faint [animation-delay:0.2s]" />
 									<span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-ink-faint [animation-delay:0.4s]" />

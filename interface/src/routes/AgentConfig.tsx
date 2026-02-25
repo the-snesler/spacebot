@@ -1,20 +1,50 @@
 import { useCallback, useEffect, useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, type AgentConfigResponse, type AgentConfigUpdateRequest } from "@/api/client";
-import { Button, SettingSidebarButton, Input, TextArea, Toggle, NumberStepper, Select, SelectTrigger, SelectValue, SelectContent, SelectItem, cx } from "@/ui";
+import {
+	api,
+	type AgentConfigResponse,
+	type AgentConfigUpdateRequest,
+} from "@/api/client";
+import {
+	Button,
+	SettingSidebarButton,
+	Input,
+	TextArea,
+	Toggle,
+	NumberStepper,
+	Select,
+	SelectTrigger,
+	SelectValue,
+	SelectContent,
+	SelectItem,
+	cx,
+} from "@/ui";
 import { ModelSelect } from "@/components/ModelSelect";
 import { Markdown } from "@/components/Markdown";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSearch, useNavigate } from "@tanstack/react-router";
 
-
 function supportsAdaptiveThinking(modelId: string): boolean {
 	const id = modelId.toLowerCase();
-	return id.includes("opus-4-6") || id.includes("opus-4.6")
-		|| id.includes("sonnet-4-6") || id.includes("sonnet-4.6");
+	return (
+		id.includes("opus-4-6") ||
+		id.includes("opus-4.6") ||
+		id.includes("sonnet-4-6") ||
+		id.includes("sonnet-4.6")
+	);
 }
 
-type SectionId = "soul" | "identity" | "user" | "routing" | "tuning" | "compaction" | "cortex" | "coalesce" | "memory" | "browser";
+type SectionId =
+	| "soul"
+	| "identity"
+	| "user"
+	| "routing"
+	| "tuning"
+	| "compaction"
+	| "cortex"
+	| "coalesce"
+	| "memory"
+	| "browser";
 
 const SECTIONS: {
 	id: SectionId;
@@ -23,16 +53,86 @@ const SECTIONS: {
 	description: string;
 	detail: string;
 }[] = [
-	{ id: "soul", label: "Soul", group: "identity", description: "SOUL.md", detail: "Defines the agent's personality, values, communication style, and behavioral boundaries. This is the core of who the agent is." },
-	{ id: "identity", label: "Identity", group: "identity", description: "IDENTITY.md", detail: "The agent's name, nature, and purpose. How it introduces itself and what it understands its role to be." },
-	{ id: "user", label: "User", group: "identity", description: "USER.md", detail: "Information about the human this agent interacts with. Name, preferences, context, and anything that helps the agent personalize responses." },
-	{ id: "routing", label: "Model Routing", group: "config", description: "Which models each process uses", detail: "Controls which LLM model is used for each process type. Channels handle user-facing conversation, branches do thinking, workers execute tasks, the compactor summarizes context, cortex observes system state, and voice transcribes audio attachments before the channel turn." },
-	{ id: "tuning", label: "Tuning", group: "config", description: "Turn limits, context window, branches", detail: "Core limits that control how much work the agent does per message. Max turns caps LLM iterations per channel message. Context window sets the token budget. Branch limits control parallel thinking." },
-	{ id: "compaction", label: "Compaction", group: "config", description: "Context compaction thresholds", detail: "Thresholds that trigger context summarization as the conversation grows. Background kicks in early, aggressive compresses harder, and emergency truncates without LLM involvement. All values are fractions of the context window." },
-	{ id: "cortex", label: "Cortex", group: "config", description: "System observer settings", detail: "The cortex monitors active processes and generates memory bulletins. Tick interval controls observation frequency. Timeouts determine when stuck workers or branches get cancelled. The circuit breaker auto-disables after consecutive failures." },
-	{ id: "coalesce", label: "Coalesce", group: "config", description: "Message batching", detail: "When multiple messages arrive in quick succession, coalescing batches them into a single LLM turn. This prevents the agent from responding to each message individually in fast-moving conversations." },
-	{ id: "memory", label: "Memory Persistence", group: "config", description: "Auto-save interval", detail: "Spawns a silent background branch at regular intervals to recall existing memories and save new ones from the recent conversation. Runs without blocking the channel." },
-	{ id: "browser", label: "Browser", group: "config", description: "Chrome automation", detail: "Controls browser automation tools available to workers. When enabled, workers can navigate web pages, take screenshots, and interact with sites. JavaScript evaluation is a separate permission." },
+	{
+		id: "soul",
+		label: "Soul",
+		group: "identity",
+		description: "SOUL.md",
+		detail:
+			"Defines the agent's personality, values, communication style, and behavioral boundaries. This is the core of who the agent is.",
+	},
+	{
+		id: "identity",
+		label: "Identity",
+		group: "identity",
+		description: "IDENTITY.md",
+		detail:
+			"The agent's name, nature, and purpose. How it introduces itself and what it understands its role to be.",
+	},
+	{
+		id: "user",
+		label: "User",
+		group: "identity",
+		description: "USER.md",
+		detail:
+			"Information about the human this agent interacts with. Name, preferences, context, and anything that helps the agent personalize responses.",
+	},
+	{
+		id: "routing",
+		label: "Model Routing",
+		group: "config",
+		description: "Which models each process uses",
+		detail:
+			"Controls which LLM model is used for each process type. Channels handle user-facing conversation, branches do thinking, workers execute tasks, the compactor summarizes context, cortex observes system state, and voice transcribes audio attachments before the channel turn.",
+	},
+	{
+		id: "tuning",
+		label: "Tuning",
+		group: "config",
+		description: "Turn limits, context window, branches",
+		detail:
+			"Core limits that control how much work the agent does per message. Max turns caps LLM iterations per channel message. Context window sets the token budget. Branch limits control parallel thinking.",
+	},
+	{
+		id: "compaction",
+		label: "Compaction",
+		group: "config",
+		description: "Context compaction thresholds",
+		detail:
+			"Thresholds that trigger context summarization as the conversation grows. Background kicks in early, aggressive compresses harder, and emergency truncates without LLM involvement. All values are fractions of the context window.",
+	},
+	{
+		id: "cortex",
+		label: "Cortex",
+		group: "config",
+		description: "System observer settings",
+		detail:
+			"The cortex monitors active processes and generates memory bulletins. Tick interval controls observation frequency. Timeouts determine when stuck workers or branches get cancelled. The circuit breaker auto-disables after consecutive failures.",
+	},
+	{
+		id: "coalesce",
+		label: "Coalesce",
+		group: "config",
+		description: "Message batching",
+		detail:
+			"When multiple messages arrive in quick succession, coalescing batches them into a single LLM turn. This prevents the agent from responding to each message individually in fast-moving conversations.",
+	},
+	{
+		id: "memory",
+		label: "Memory Persistence",
+		group: "config",
+		description: "Auto-save interval",
+		detail:
+			"Spawns a silent background branch at regular intervals to recall existing memories and save new ones from the recent conversation. Runs without blocking the channel.",
+	},
+	{
+		id: "browser",
+		label: "Browser",
+		group: "config",
+		description: "Chrome automation",
+		detail:
+			"Controls browser automation tools available to workers. When enabled, workers can navigate web pages, take screenshots, and interact with sites. JavaScript evaluation is a separate permission.",
+	},
 ];
 
 interface AgentConfigProps {
@@ -43,7 +143,10 @@ const isIdentityField = (id: SectionId): id is "soul" | "identity" | "user" => {
 	return id === "soul" || id === "identity" || id === "user";
 };
 
-const getIdentityField = (data: { soul: string | null; identity: string | null; user: string | null }, field: SectionId): string | null => {
+const getIdentityField = (
+	data: { soul: string | null; identity: string | null; user: string | null },
+	field: SectionId,
+): string | null => {
 	if (isIdentityField(field)) {
 		return data[field];
 	}
@@ -53,7 +156,9 @@ const getIdentityField = (data: { soul: string | null; identity: string | null; 
 export function AgentConfig({ agentId }: AgentConfigProps) {
 	const queryClient = useQueryClient();
 	const navigate = useNavigate();
-	const search = useSearch({from: "/agents/$agentId/config"}) as {tab?: string};
+	const search = useSearch({ from: "/agents/$agentId/config" }) as {
+		tab?: string;
+	};
 	const [activeSection, setActiveSection] = useState<SectionId>("soul");
 	const [dirty, setDirty] = useState(false);
 	const [saving, setSaving] = useState(false);
@@ -62,7 +167,18 @@ export function AgentConfig({ agentId }: AgentConfigProps) {
 	// Sync activeSection with URL search param
 	useEffect(() => {
 		if (search.tab) {
-			const validSections: SectionId[] = ["soul", "identity", "user", "routing", "tuning", "compaction", "cortex", "coalesce", "memory", "browser"];
+			const validSections: SectionId[] = [
+				"soul",
+				"identity",
+				"user",
+				"routing",
+				"tuning",
+				"compaction",
+				"cortex",
+				"coalesce",
+				"memory",
+				"browser",
+			];
 			if (validSections.includes(search.tab as SectionId)) {
 				setActiveSection(search.tab as SectionId);
 			}
@@ -71,7 +187,11 @@ export function AgentConfig({ agentId }: AgentConfigProps) {
 
 	const handleSectionChange = (section: SectionId) => {
 		setActiveSection(section);
-		navigate({to: "/agents/$agentId/config", params: {agentId}, search: {tab: section}});
+		navigate({
+			to: "/agents/$agentId/config",
+			params: { agentId },
+			search: { tab: section },
+		});
 	};
 
 	const identityQuery = useQuery({
@@ -87,7 +207,10 @@ export function AgentConfig({ agentId }: AgentConfigProps) {
 	});
 
 	const identityMutation = useMutation({
-		mutationFn: (update: { field: "soul" | "identity" | "user"; content: string }) =>
+		mutationFn: (update: {
+			field: "soul" | "identity" | "user";
+			content: string;
+		}) =>
 			api.updateIdentity({
 				agent_id: agentId,
 				[update.field]: update.content,
@@ -102,7 +225,8 @@ export function AgentConfig({ agentId }: AgentConfigProps) {
 	});
 
 	const configMutation = useMutation({
-		mutationFn: (update: AgentConfigUpdateRequest) => api.updateAgentConfig(update),
+		mutationFn: (update: AgentConfigUpdateRequest) =>
+			api.updateAgentConfig(update),
 		onMutate: () => setSaving(true),
 		onSuccess: (result) => {
 			queryClient.setQueryData(["agent-config", agentId], result);
@@ -151,12 +275,17 @@ export function AgentConfig({ agentId }: AgentConfigProps) {
 			<div className="flex w-52 flex-shrink-0 flex-col border-r border-app-line/50 bg-app-darkBox/20 overflow-y-auto">
 				{/* Identity Group */}
 				<div className="px-3 pb-1 pt-4">
-					<span className="text-tiny font-medium uppercase tracking-wider text-ink-faint">Identity</span>
+					<span className="text-tiny font-medium uppercase tracking-wider text-ink-faint">
+						Identity
+					</span>
 				</div>
-					<div className="flex flex-col gap-0.5 px-2">
+				<div className="flex flex-col gap-0.5 px-2">
 					{SECTIONS.filter((s) => s.group === "identity").map((section) => {
 						const isActive = activeSection === section.id;
-						const hasContent = !!getIdentityField(identityQuery.data ?? { soul: null, identity: null, user: null }, section.id)?.trim();
+						const hasContent = !!getIdentityField(
+							identityQuery.data ?? { soul: null, identity: null, user: null },
+							section.id,
+						)?.trim();
 						return (
 							<SettingSidebarButton
 								key={section.id}
@@ -165,7 +294,9 @@ export function AgentConfig({ agentId }: AgentConfigProps) {
 							>
 								<span className="flex-1">{section.label}</span>
 								{!hasContent && (
-									<span className="rounded bg-amber-500/10 px-1 py-0.5 text-tiny text-amber-400/70">empty</span>
+									<span className="rounded bg-amber-500/10 px-1 py-0.5 text-tiny text-amber-400/70">
+										empty
+									</span>
 								)}
 							</SettingSidebarButton>
 						);
@@ -174,9 +305,11 @@ export function AgentConfig({ agentId }: AgentConfigProps) {
 
 				{/* Config Group */}
 				<div className="px-3 pb-1 pt-4 mt-2">
-					<span className="text-tiny font-medium uppercase tracking-wider text-ink-faint">Configuration</span>
+					<span className="text-tiny font-medium uppercase tracking-wider text-ink-faint">
+						Configuration
+					</span>
 				</div>
-					<div className="flex flex-col gap-0.5 px-2">
+				<div className="flex flex-col gap-0.5 px-2">
 					{SECTIONS.filter((s) => s.group === "config").map((section) => {
 						const isActive = activeSection === section.id;
 						return (
@@ -195,20 +328,23 @@ export function AgentConfig({ agentId }: AgentConfigProps) {
 			{/* Editor */}
 			<div className="flex flex-1 flex-col overflow-hidden">
 				{isIdentitySection ? (
-				<IdentityEditor
-					key={active.id}
-					label={active.label}
-					description={active.description}
-					content={getIdentityField(identityQuery.data ?? { soul: null, identity: null, user: null }, active.id)}
-					onDirtyChange={setDirty}
-					saveHandlerRef={saveHandlerRef}
-					onSave={(content) => {
-						// Only mutate for identity sections
-						if (isIdentityField(active.id)) {
-							identityMutation.mutate({ field: active.id, content });
-						}
-					}}
-				/>
+					<IdentityEditor
+						key={active.id}
+						label={active.label}
+						description={active.description}
+						content={getIdentityField(
+							identityQuery.data ?? { soul: null, identity: null, user: null },
+							active.id,
+						)}
+						onDirtyChange={setDirty}
+						saveHandlerRef={saveHandlerRef}
+						onSave={(content) => {
+							// Only mutate for identity sections
+							if (isIdentityField(active.id)) {
+								identityMutation.mutate({ field: active.id, content });
+							}
+						}}
+					/>
 				) : (
 					<ConfigSectionEditor
 						sectionId={active.id}
@@ -218,7 +354,9 @@ export function AgentConfig({ agentId }: AgentConfigProps) {
 						config={configQuery.data!}
 						onDirtyChange={setDirty}
 						saveHandlerRef={saveHandlerRef}
-						onSave={(update) => configMutation.mutate({ agent_id: agentId, ...update })}
+						onSave={(update) =>
+							configMutation.mutate({ agent_id: agentId, ...update })
+						}
 					/>
 				)}
 			</div>
@@ -233,20 +371,14 @@ export function AgentConfig({ agentId }: AgentConfigProps) {
 						transition={{ type: "spring", damping: 25, stiffness: 300 }}
 						className="absolute bottom-4 right-4 flex items-center gap-4 rounded-lg border border-app-line/50 bg-app-darkBox px-4 py-3 shadow-lg"
 					>
-						<span className="text-sm text-ink-dull">You have unsaved changes</span>
+						<span className="text-sm text-ink-dull">
+							You have unsaved changes
+						</span>
 						<div className="flex items-center gap-2">
-							<Button
-								onClick={handleRevert}
-								variant="ghost"
-								size="sm"
-							>
+							<Button onClick={handleRevert} variant="ghost" size="sm">
 								Revert
 							</Button>
-							<Button
-								onClick={handleSave}
-								size="sm"
-								loading={saving}
-							>
+							<Button onClick={handleSave} size="sm" loading={saving}>
 								Save Changes
 							</Button>
 						</div>
@@ -264,11 +396,21 @@ interface IdentityEditorProps {
 	description: string;
 	content: string | null;
 	onDirtyChange: (dirty: boolean) => void;
-	saveHandlerRef: React.MutableRefObject<{ save?: () => void; revert?: () => void }>;
+	saveHandlerRef: React.MutableRefObject<{
+		save?: () => void;
+		revert?: () => void;
+	}>;
 	onSave: (value: string) => void;
 }
 
-function IdentityEditor({ label, description, content, onDirtyChange, saveHandlerRef, onSave }: IdentityEditorProps) {
+function IdentityEditor({
+	label,
+	description,
+	content,
+	onDirtyChange,
+	saveHandlerRef,
+	onSave,
+}: IdentityEditorProps) {
 	const [value, setValue] = useState(content ?? "");
 	const [localDirty, setLocalDirty] = useState(false);
 	const [mode, setMode] = useState<"edit" | "preview">("edit");
@@ -283,10 +425,13 @@ function IdentityEditor({ label, description, content, onDirtyChange, saveHandle
 		onDirtyChange(localDirty);
 	}, [localDirty, onDirtyChange]);
 
-	const handleChange = useCallback((event: React.ChangeEvent<HTMLTextAreaElement>) => {
-		setValue(event.target.value);
-		setLocalDirty(true);
-	}, []);
+	const handleChange = useCallback(
+		(event: React.ChangeEvent<HTMLTextAreaElement>) => {
+			setValue(event.target.value);
+			setLocalDirty(true);
+		},
+		[],
+	);
 
 	const handleSave = useCallback(() => {
 		onSave(value);
@@ -323,19 +468,31 @@ function IdentityEditor({ label, description, content, onDirtyChange, saveHandle
 			<div className="flex items-center justify-between border-b border-app-line/50 bg-app-darkBox/20 px-5 py-2.5">
 				<div className="flex items-center gap-3">
 					<h3 className="text-sm font-medium text-ink">{label}</h3>
-					<span className="rounded bg-app-darkBox px-1.5 py-0.5 font-mono text-tiny text-ink-faint">{description}</span>
+					<span className="rounded bg-app-darkBox px-1.5 py-0.5 font-mono text-tiny text-ink-faint">
+						{description}
+					</span>
 				</div>
 				<div className="flex items-center gap-3">
 					<div className="flex items-center rounded border border-app-line/50 text-tiny">
 						<button
 							onClick={() => setMode("edit")}
-							className={cx("px-2 py-0.5 rounded-l transition-colors", mode === "edit" ? "bg-app-darkBox text-ink" : "text-ink-faint hover:text-ink")}
+							className={cx(
+								"px-2 py-0.5 rounded-l transition-colors",
+								mode === "edit"
+									? "bg-app-darkBox text-ink"
+									: "text-ink-faint hover:text-ink",
+							)}
 						>
 							Edit
 						</button>
 						<button
 							onClick={() => setMode("preview")}
-							className={cx("px-2 py-0.5 rounded-r transition-colors", mode === "preview" ? "bg-app-darkBox text-ink" : "text-ink-faint hover:text-ink")}
+							className={cx(
+								"px-2 py-0.5 rounded-r transition-colors",
+								mode === "preview"
+									? "bg-app-darkBox text-ink"
+									: "text-ink-faint hover:text-ink",
+							)}
 						>
 							Preview
 						</button>
@@ -362,7 +519,9 @@ function IdentityEditor({ label, description, content, onDirtyChange, saveHandle
 						{value ? (
 							<Markdown>{value}</Markdown>
 						) : (
-							<span className="text-ink-faint/40 text-sm">Nothing to preview.</span>
+							<span className="text-ink-faint/40 text-sm">
+								Nothing to preview.
+							</span>
 						)}
 					</div>
 				)}
@@ -380,12 +539,26 @@ interface ConfigSectionEditorProps {
 	detail: string;
 	config: AgentConfigResponse;
 	onDirtyChange: (dirty: boolean) => void;
-	saveHandlerRef: React.MutableRefObject<{ save?: () => void; revert?: () => void }>;
+	saveHandlerRef: React.MutableRefObject<{
+		save?: () => void;
+		revert?: () => void;
+	}>;
 	onSave: (update: Partial<AgentConfigUpdateRequest>) => void;
 }
 
-function ConfigSectionEditor({ sectionId, label, description, detail, config, onDirtyChange, saveHandlerRef, onSave }: ConfigSectionEditorProps) {
-	const [localValues, setLocalValues] = useState<Record<string, string | number | boolean>>(() => {
+function ConfigSectionEditor({
+	sectionId,
+	label,
+	description,
+	detail,
+	config,
+	onDirtyChange,
+	saveHandlerRef,
+	onSave,
+}: ConfigSectionEditorProps) {
+	const [localValues, setLocalValues] = useState<
+		Record<string, string | number | boolean>
+	>(() => {
 		// Initialize from config based on section
 		switch (sectionId) {
 			case "routing":
@@ -442,10 +615,13 @@ function ConfigSectionEditor({ sectionId, label, description, detail, config, on
 		}
 	}, [config, sectionId, localDirty]);
 
-	const handleChange = useCallback((field: string, value: string | number | boolean) => {
-		setLocalValues((prev) => ({ ...prev, [field]: value }));
-		setLocalDirty(true);
-	}, []);
+	const handleChange = useCallback(
+		(field: string, value: string | number | boolean) => {
+			setLocalValues((prev) => ({ ...prev, [field]: value }));
+			setLocalDirty(true);
+		},
+		[],
+	);
 
 	const handleSave = useCallback(() => {
 		onSave({ [sectionId]: localValues });
@@ -493,12 +669,36 @@ function ConfigSectionEditor({ sectionId, label, description, detail, config, on
 		switch (sectionId) {
 			case "routing": {
 				const modelSlots = [
-					{ key: "channel", label: "Channel Model", description: "Model for user-facing channels" },
-					{ key: "branch", label: "Branch Model", description: "Model for thinking branches" },
-					{ key: "worker", label: "Worker Model", description: "Model for task workers" },
-					{ key: "compactor", label: "Compactor Model", description: "Model for summarization" },
-					{ key: "cortex", label: "Cortex Model", description: "Model for system observation" },
-					{ key: "voice", label: "Voice Model", description: "Model for transcribing audio attachments" },
+					{
+						key: "channel",
+						label: "Channel Model",
+						description: "Model for user-facing channels",
+					},
+					{
+						key: "branch",
+						label: "Branch Model",
+						description: "Model for thinking branches",
+					},
+					{
+						key: "worker",
+						label: "Worker Model",
+						description: "Model for task workers",
+					},
+					{
+						key: "compactor",
+						label: "Compactor Model",
+						description: "Model for summarization",
+					},
+					{
+						key: "cortex",
+						label: "Cortex Model",
+						description: "Model for system observation",
+					},
+					{
+						key: "voice",
+						label: "Voice Model",
+						description: "Model for transcribing audio attachments",
+					},
 				];
 				return (
 					<div className="grid gap-4">
@@ -509,14 +709,23 @@ function ConfigSectionEditor({ sectionId, label, description, detail, config, on
 									description={description}
 									value={localValues[key] as string}
 									onChange={(v) => handleChange(key, v)}
-									capability={key === "voice" ? "voice_transcription" : undefined}
+									capability={
+										key === "voice" ? "voice_transcription" : undefined
+									}
 								/>
 								{supportsAdaptiveThinking(localValues[key] as string) && (
 									<div className="ml-4 flex flex-col gap-1">
-										<label className="text-xs font-medium text-ink-dull">Thinking Effort</label>
+										<label className="text-xs font-medium text-ink-dull">
+											Thinking Effort
+										</label>
 										<Select
-											value={(localValues[`${key}_thinking_effort`] as string) || "auto"}
-											onValueChange={(value) => handleChange(`${key}_thinking_effort`, value)}
+											value={
+												(localValues[`${key}_thinking_effort`] as string) ||
+												"auto"
+											}
+											onValueChange={(value) =>
+												handleChange(`${key}_thinking_effort`, value)
+											}
 										>
 											<SelectTrigger className="border-app-line/50 bg-app-darkBox/30">
 												<SelectValue />
@@ -800,7 +1009,9 @@ function ConfigSectionEditor({ sectionId, label, description, detail, config, on
 				{localDirty ? (
 					<span className="text-tiny text-amber-400">Unsaved changes</span>
 				) : (
-					<span className="text-tiny text-ink-faint/50">Changes saved to config.toml</span>
+					<span className="text-tiny text-ink-faint/50">
+						Changes saved to config.toml
+					</span>
 				)}
 			</div>
 			<div className="flex-1 overflow-y-auto px-8 py-8">
@@ -822,7 +1033,12 @@ interface ConfigFieldProps {
 	onChange: (value: string) => void;
 }
 
-function ConfigField({ label, description, value, onChange }: ConfigFieldProps) {
+function ConfigField({
+	label,
+	description,
+	value,
+	onChange,
+}: ConfigFieldProps) {
 	return (
 		<div className="flex flex-col gap-1.5">
 			<label className="text-sm font-medium text-ink">{label}</label>
@@ -844,7 +1060,12 @@ interface ConfigToggleFieldProps {
 	onChange: (value: boolean) => void;
 }
 
-function ConfigToggleField({ label, description, value, onChange }: ConfigToggleFieldProps) {
+function ConfigToggleField({
+	label,
+	description,
+	value,
+	onChange,
+}: ConfigToggleFieldProps) {
 	return (
 		<div className="flex items-center justify-between py-2">
 			<div className="flex flex-col gap-0.5">
