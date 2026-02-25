@@ -145,8 +145,20 @@ fn build_channel_system_prompt(rc: &spacebot::config::RuntimeConfig) -> String {
     let browser_enabled = rc.browser_config.load().enabled;
     let web_search_enabled = rc.brave_search_key.load().is_some();
     let opencode_enabled = rc.opencode.load().enabled;
+    let acp_agents = rc
+        .acp
+        .load()
+        .iter()
+        .filter(|(_, config)| config.enabled && !config.command.trim().is_empty())
+        .map(|(id, _)| id.clone())
+        .collect::<Vec<_>>();
     let worker_capabilities = prompt_engine
-        .render_worker_capabilities(browser_enabled, web_search_enabled, opencode_enabled)
+        .render_worker_capabilities(
+            browser_enabled,
+            web_search_enabled,
+            opencode_enabled,
+            acp_agents,
+        )
         .expect("failed to render worker capabilities");
 
     let conversation_context = prompt_engine

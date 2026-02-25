@@ -125,6 +125,14 @@ pub enum ProcessEvent {
         channel_id: Option<ChannelId>,
         status: String,
     },
+    WorkerResult {
+        agent_id: AgentId,
+        worker_id: WorkerId,
+        channel_id: Option<ChannelId>,
+        result: String,
+        notify: bool,
+        success: bool,
+    },
     WorkerComplete {
         agent_id: AgentId,
         worker_id: WorkerId,

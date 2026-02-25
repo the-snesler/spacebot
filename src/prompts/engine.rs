@@ -177,19 +177,23 @@ impl PromptEngine {
         self.render(template_name, Value::UNDEFINED)
     }
 
-    /// Convenience method for rendering worker capabilities fragment.
+    /// Convenience method for rendering worker capabilities fragment,
     pub fn render_worker_capabilities(
         &self,
         browser_enabled: bool,
         web_search_enabled: bool,
         opencode_enabled: bool,
+        acp_agents: Vec<String>,
     ) -> Result<String> {
+        let acp_enabled = !acp_agents.is_empty();
         self.render(
             "fragments/worker_capabilities",
             context! {
                 browser_enabled => browser_enabled,
                 web_search_enabled => web_search_enabled,
                 opencode_enabled => opencode_enabled,
+                acp_enabled => acp_enabled,
+                acp_agents => acp_agents,
             },
         )
     }

@@ -1,8 +1,7 @@
-
 ## Worker Types
-{%- if opencode_enabled %}
+{%- if opencode_enabled or acp_enabled %}
 
-You have two kinds of workers. Choose the right one for the task:
+You have multiple worker types. Choose the right one for the task:
 
 ### Builtin Workers (default)
 
@@ -27,19 +26,42 @@ When you spawn a worker, it runs independently with a task description and retur
 Workers do NOT have conversation context or memory access. Include all necessary context in the task description.
 
 **Good for:** running commands, reading/writing files, skill execution, web scraping, quick one-shot tasks.
-{%- if opencode_enabled %}
 
-### OpenCode Workers
+{%- if opencode_enabled or acp_enabled %}
+### Persistent Coding Workers
 
-Full coding agents with codebase exploration, context management, and their own tool suite. They operate on a directory and maintain context across the session. Use `worker_type: "opencode"` with a `directory` path when spawning.
+For coding tasks that require understanding a codebase, maintaining context, and making multiple changes, use persistent coding workers. These workers on a specified directory, using a coding agent (OpenCode or ACP-backed) that maintains its own context and tool suite.
 
 **Good for:** multi-file code changes, feature implementation, debugging test failures, refactoring, any task that requires exploring and understanding a codebase.
+
+{%- if opencode_enabled %}
+
+#### OpenCode Workers
+
+OpenCode-backed coding agents. Use `worker_type: "opencode"` with a `directory` path when spawning.
+
+{%- endif %}
+{%- if acp_enabled %}
+
+#### ACP Workers
+
+Agent Client Protocol-backed coding agents. Use `worker_type: "acp"` with a `directory` path when spawning. The user may ask for a specific agent to run the task, for example: "Use Claude Code to implement the auth flow". In that case, provide `acp_id` to select the right agent.
+
+{%- if acp_agents | length > 0 %}
+**Configured ACP agents:**
+{%- for agent in acp_agents %}
+- `{{ agent }}`
+{%- endfor %}
+{%- endif %}
+{%- endif %}
+{%- endif %}
+{%- if opencode_enabled or acp_enabled %}
 
 ### When to Use Which
 
 - **Need to run a command, check something, or do a quick task?** → Builtin worker
-- **Need to write or modify code across multiple files?** → OpenCode worker
+- **Need to write or modify code across multiple files?** → Code worker
 - **Task involves a skill (weather, pdf-generator, etc)?** → Builtin worker
-- **Task requires understanding a codebase before making changes?** → OpenCode worker
+- **Task requires understanding a codebase before making changes?** → Code worker
 - **Simple file read/write with no exploration needed?** → Builtin worker
 {%- endif %}

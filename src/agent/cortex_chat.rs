@@ -333,10 +333,18 @@ impl CortexChatSession {
         let browser_enabled = runtime_config.browser_config.load().enabled;
         let web_search_enabled = runtime_config.brave_search_key.load().is_some();
         let opencode_enabled = runtime_config.opencode.load().enabled;
+        let acp_agents = runtime_config
+            .acp
+            .load()
+            .iter()
+            .filter(|(_, config)| config.enabled && !config.command.trim().is_empty())
+            .map(|(id, _)| id.clone())
+            .collect::<Vec<_>>();
         let worker_capabilities = prompt_engine.render_worker_capabilities(
             browser_enabled,
             web_search_enabled,
             opencode_enabled,
+            acp_agents,
         )?;
 
         // Load channel transcript if a channel context is active

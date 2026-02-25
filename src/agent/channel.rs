@@ -670,10 +670,18 @@ impl Channel {
         let browser_enabled = rc.browser_config.load().enabled;
         let web_search_enabled = rc.brave_search_key.load().is_some();
         let opencode_enabled = rc.opencode.load().enabled;
+        let acp_agents = rc
+            .acp
+            .load()
+            .iter()
+            .filter(|(_, config)| config.enabled && !config.command.trim().is_empty())
+            .map(|(id, _)| id.clone())
+            .collect::<Vec<_>>();
         let worker_capabilities = prompt_engine.render_worker_capabilities(
             browser_enabled,
             web_search_enabled,
             opencode_enabled,
+            acp_agents,
         )?;
 
         let status_text = {
@@ -1219,10 +1227,18 @@ impl Channel {
         let browser_enabled = rc.browser_config.load().enabled;
         let web_search_enabled = rc.brave_search_key.load().is_some();
         let opencode_enabled = rc.opencode.load().enabled;
+        let acp_agents = rc
+            .acp
+            .load()
+            .iter()
+            .filter(|(_, config)| config.enabled && !config.command.trim().is_empty())
+            .map(|(id, _)| id.clone())
+            .collect::<Vec<_>>();
         let worker_capabilities = prompt_engine.render_worker_capabilities(
             browser_enabled,
             web_search_enabled,
             opencode_enabled,
+            acp_agents,
         )?;
 
         let status_text = {
@@ -1632,6 +1648,31 @@ impl Channel {
                 worker_id, status, ..
             } => {
                 run_logger.log_worker_status(*worker_id, status);
+            }
+            ProcessEvent::WorkerResult {
+                worker_id,
+                result,
+                notify,
+                success,
+                ..
+            } => {
+                run_logger.log_worker_status(
+                    *worker_id,
+                    if *success {
+                        "interactive result available"
+                    } else {
+                        "interactive result failed"
+                    },
+                );
+
+                if *notify {
+                    let mut history = self.state.history.write().await;
+                    let worker_message = format!("[Worker {worker_id} result]: {result}");
+                    history.push(rig::message::Message::from(worker_message));
+                    should_retrigger = true;
+                }
+
+                tracing::info!(worker_id = %worker_id, "worker result incorporated");
             }
             ProcessEvent::WorkerComplete {
                 worker_id,
@@ -2066,6 +2107,7 @@ pub async fn spawn_worker_from_state(
         state.deps.event_tx.clone(),
         state.deps.agent_id.clone(),
         Some(state.channel_id.clone()),
+        true,
         worker.run().instrument(worker_span),
     );
 
@@ -2161,6 +2203,7 @@ pub async fn spawn_opencode_worker_from_state(
         state.deps.event_tx.clone(),
         state.deps.agent_id.clone(),
         Some(state.channel_id.clone()),
+        true,
         async move {
             let result = worker.run().await?;
             Ok::<String, anyhow::Error>(result.result_text)
@@ -2170,7 +2213,7 @@ pub async fn spawn_opencode_worker_from_state(
 
     state.worker_handles.write().await.insert(worker_id, handle);
 
-    let opencode_task = format!("[opencode] {task}");
+    let opencode_task = task.clone();
     {
         let mut status = state.status_block.write().await;
         status.add_worker(worker_id, &opencode_task, false);
@@ -2291,6 +2334,7 @@ pub async fn spawn_acp_worker_from_state(
         state.deps.event_tx.clone(),
         state.deps.agent_id.clone(),
         Some(state.channel_id.clone()),
+        false,
         async move {
             let result = tokio::task::spawn_blocking(move || -> anyhow::Result<String> {
                 let runtime = tokio::runtime::Builder::new_current_thread()
@@ -2313,7 +2357,7 @@ pub async fn spawn_acp_worker_from_state(
 
     state.worker_handles.write().await.insert(worker_id, handle);
 
-    let acp_task = format!("[acp:{}] {}", acp_label, task);
+    let acp_task = task.clone();
     {
         let mut status = state.status_block.write().await;
         status.add_worker(worker_id, &acp_task, false);
@@ -2327,7 +2371,7 @@ pub async fn spawn_acp_worker_from_state(
             worker_id,
             channel_id: Some(state.channel_id.clone()),
             task: acp_task,
-            worker_type: "acp".into(),
+            worker_type: format!("acp - {}", acp_label),
         })
         .ok();
 
@@ -2346,6 +2390,7 @@ fn spawn_worker_task<F, E>(
     event_tx: broadcast::Sender<ProcessEvent>,
     agent_id: crate::AgentId,
     channel_id: Option<ChannelId>,
+    emit_completion_event: bool,
     future: F,
 ) -> tokio::task::JoinHandle<()>
 where
@@ -2382,14 +2427,16 @@ where
                 .observe(worker_start.elapsed().as_secs_f64());
         }
 
-        let _ = event_tx.send(ProcessEvent::WorkerComplete {
-            agent_id,
-            worker_id,
-            channel_id,
-            result: result_text,
-            notify,
-            success,
-        });
+        if emit_completion_event || !success {
+            let _ = event_tx.send(ProcessEvent::WorkerComplete {
+                agent_id,
+                worker_id,
+                channel_id,
+                result: result_text,
+                notify,
+                success,
+            });
+        }
     })
 }
 
@@ -2525,6 +2572,10 @@ fn event_is_for_channel(event: &ProcessEvent, channel_id: &ChannelId) -> bool {
             ..
         } => event_channel == channel_id,
         ProcessEvent::WorkerComplete {
+            channel_id: event_channel,
+            ..
+        } => event_channel.as_ref() == Some(channel_id),
+        ProcessEvent::WorkerResult {
             channel_id: event_channel,
             ..
         } => event_channel.as_ref() == Some(channel_id),
