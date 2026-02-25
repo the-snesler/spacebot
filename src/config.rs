@@ -348,6 +348,8 @@ pub struct DefaultsConfig {
     pub history_backfill_count: usize,
     pub cron: Vec<CronDef>,
     pub opencode: OpenCodeConfig,
+    /// ACP agent definitions shared across all agents.
+    pub acp: HashMap<String, AcpAgentConfig>,
     /// Worker log mode: "errors_only", "all_separate", or "all_combined".
     pub worker_log_mode: crate::settings::WorkerLogMode,
 }
@@ -376,6 +378,7 @@ impl std::fmt::Debug for DefaultsConfig {
             .field("history_backfill_count", &self.history_backfill_count)
             .field("cron", &self.cron)
             .field("opencode", &self.opencode)
+            .field("acp", &self.acp)
             .field("worker_log_mode", &self.worker_log_mode)
             .finish()
     }
@@ -563,6 +566,40 @@ impl Default for OpenCodeConfig {
             server_startup_timeout_secs: 30,
             max_restart_retries: 5,
             permissions: crate::opencode::OpenCodePermissions::default(),
+        }
+    }
+}
+
+/// ACP (Agent Client Protocol) agent configuration.
+///
+/// Configured under `[defaults.acp.<id>]` in config.toml. Each entry
+/// represents a separate ACP-compatible coding agent that Spacebot can spawn
+/// and communicate with over stdio.
+#[derive(Debug, Clone)]
+pub struct AcpAgentConfig {
+    /// Unique identifier for this ACP agent (the TOML table key).
+    pub id: String,
+    /// Whether this ACP agent is available for use.
+    pub enabled: bool,
+    /// Path to the agent binary (supports "env:VAR_NAME" references).
+    pub command: String,
+    /// Arguments passed to the agent binary.
+    pub args: Vec<String>,
+    /// Environment variables set when spawning the agent process.
+    pub env: HashMap<String, String>,
+    /// Session timeout in seconds. `None` uses a default of 300s.
+    pub timeout: u64,
+}
+
+impl Default for AcpAgentConfig {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            enabled: true,
+            command: String::new(),
+            args: Vec::new(),
+            env: HashMap::new(),
+            timeout: 300,
         }
     }
 }
@@ -766,6 +803,8 @@ pub struct AgentConfig {
     pub cron_timezone: Option<String>,
     /// Sandbox configuration for process containment.
     pub sandbox: Option<crate::sandbox::SandboxConfig>,
+    /// Per-agent ACP overrides. None inherits from defaults.
+    pub acp: Option<HashMap<String, AcpAgentConfig>>,
     /// Cron job definitions for this agent.
     pub cron: Vec<CronDef>,
 }
@@ -816,6 +855,7 @@ pub struct ResolvedAgentConfig {
     pub sandbox: crate::sandbox::SandboxConfig,
     /// Number of messages to fetch from the platform when a new channel is created.
     pub history_backfill_count: usize,
+    pub acp: HashMap<String, AcpAgentConfig>,
     pub cron: Vec<CronDef>,
 }
 
@@ -841,6 +881,7 @@ impl Default for DefaultsConfig {
             history_backfill_count: 50,
             cron: Vec::new(),
             opencode: OpenCodeConfig::default(),
+            acp: HashMap::new(),
             worker_log_mode: crate::settings::WorkerLogMode::default(),
         }
     }
@@ -898,6 +939,7 @@ impl AgentConfig {
             ),
             sandbox: self.sandbox.clone().unwrap_or_default(),
             history_backfill_count: defaults.history_backfill_count,
+            acp: resolve_acp_configs(&defaults.acp, self.acp.as_ref()),
             cron: self.cron.clone(),
         }
     }
@@ -1720,6 +1762,8 @@ struct TomlDefaultsConfig {
     brave_search_key: Option<String>,
     cron_timezone: Option<String>,
     opencode: Option<TomlOpenCodeConfig>,
+    #[serde(default)]
+    acp: HashMap<String, TomlAcpAgentConfig>,
     worker_log_mode: Option<String>,
 }
 
@@ -1820,6 +1864,18 @@ struct TomlOpenCodePermissions {
     webfetch: Option<String>,
 }
 
+#[derive(Deserialize, Clone, Default)]
+struct TomlAcpAgentConfig {
+    #[serde(default = "default_enabled")]
+    enabled: bool,
+    command: Option<String>,
+    #[serde(default)]
+    args: Vec<String>,
+    #[serde(default)]
+    env: HashMap<String, String>,
+    timeout: Option<u64>,
+}
+
 #[derive(Deserialize, Clone)]
 struct TomlMcpServerConfig {
     name: String,
@@ -1865,6 +1921,8 @@ struct TomlAgentConfig {
     brave_search_key: Option<String>,
     cron_timezone: Option<String>,
     sandbox: Option<crate::sandbox::SandboxConfig>,
+    #[serde(default)]
+    acp: Option<HashMap<String, TomlAcpAgentConfig>>,
     #[serde(default)]
     cron: Vec<TomlCronDef>,
 }
@@ -2170,6 +2228,20 @@ fn resolve_mcp_configs(
         }
     }
 
+    merged
+}
+
+/// Merge default ACP configs with optional per-agent overrides.
+fn resolve_acp_configs(
+    default_configs: &HashMap<String, AcpAgentConfig>,
+    agent_configs: Option<&HashMap<String, AcpAgentConfig>>,
+) -> HashMap<String, AcpAgentConfig> {
+    let mut merged = default_configs.clone();
+    if let Some(overrides) = agent_configs {
+        for (id, cfg) in overrides {
+            merged.insert(id.clone(), cfg.clone());
+        }
+    }
     merged
 }
 
@@ -2546,6 +2618,7 @@ impl Config {
             brave_search_key: None,
             cron_timezone: None,
             sandbox: None,
+            acp: None,
             cron: Vec::new(),
         }];
 
@@ -3157,6 +3230,41 @@ impl Config {
                     }
                 })
                 .unwrap_or_else(|| base_defaults.opencode.clone()),
+            acp: {
+                let mut merged = base_defaults.acp.clone();
+                for (id, toml_acp) in &toml.defaults.acp {
+                    let base_entry = merged.get(id);
+                    let resolved_command = toml_acp
+                        .command
+                        .as_deref()
+                        .and_then(resolve_env_value)
+                        .or_else(|| toml_acp.command.clone())
+                        .or_else(|| base_entry.map(|b| b.command.clone()))
+                        .unwrap_or_default();
+                    merged.insert(
+                        id.clone(),
+                        AcpAgentConfig {
+                            id: id.clone(),
+                            enabled: toml_acp.enabled,
+                            command: resolved_command,
+                            args: if toml_acp.args.is_empty() {
+                                base_entry.map(|b| b.args.clone()).unwrap_or_default()
+                            } else {
+                                toml_acp.args.clone()
+                            },
+                            env: if toml_acp.env.is_empty() {
+                                base_entry.map(|b| b.env.clone()).unwrap_or_default()
+                            } else {
+                                toml_acp.env.clone()
+                            },
+                            timeout: toml_acp
+                                .timeout
+                                .unwrap_or_else(|| base_entry.map(|b| b.timeout).unwrap_or(300)),
+                        },
+                    );
+                }
+                merged
+            },
             worker_log_mode: toml
                 .defaults
                 .worker_log_mode
@@ -3308,6 +3416,30 @@ impl Config {
                     brave_search_key: a.brave_search_key.as_deref().and_then(resolve_env_value),
                     cron_timezone: a.cron_timezone.as_deref().and_then(resolve_env_value),
                     sandbox: a.sandbox,
+                    acp: a.acp.map(|acp_map| {
+                        acp_map
+                            .into_iter()
+                            .map(|(id, toml_acp)| {
+                                let resolved_command = toml_acp
+                                    .command
+                                    .as_deref()
+                                    .and_then(resolve_env_value)
+                                    .or_else(|| toml_acp.command.clone())
+                                    .unwrap_or_default();
+                                (
+                                    id.clone(),
+                                    AcpAgentConfig {
+                                        id,
+                                        enabled: toml_acp.enabled,
+                                        command: resolved_command,
+                                        args: toml_acp.args,
+                                        env: toml_acp.env,
+                                        timeout: toml_acp.timeout.unwrap_or(300),
+                                    },
+                                )
+                            })
+                            .collect()
+                    }),
                     cron,
                 })
             })
@@ -3337,6 +3469,7 @@ impl Config {
                 brave_search_key: None,
                 cron_timezone: None,
                 sandbox: None,
+                acp: None,
                 cron: Vec::new(),
             });
         }
@@ -3625,6 +3758,8 @@ pub struct RuntimeConfig {
     pub opencode: ArcSwap<OpenCodeConfig>,
     /// Shared pool of OpenCode server processes. Lazily initialized on first use.
     pub opencode_server_pool: Arc<crate::opencode::OpenCodeServerPool>,
+    /// ACP agent definitions for this runtime.
+    pub acp: ArcSwap<HashMap<String, AcpAgentConfig>>,
     /// Cron store, set after agent initialization.
     pub cron_store: ArcSwap<Option<Arc<crate::cron::CronStore>>>,
     /// Cron scheduler, set after agent initialization.
@@ -3680,6 +3815,7 @@ impl RuntimeConfig {
             skills: ArcSwap::from_pointee(skills),
             opencode: ArcSwap::from_pointee(defaults.opencode.clone()),
             opencode_server_pool: Arc::new(server_pool),
+            acp: ArcSwap::from_pointee(agent_config.acp.clone()),
             cron_store: ArcSwap::from_pointee(None),
             cron_scheduler: ArcSwap::from_pointee(None),
             settings: ArcSwap::from_pointee(None),
