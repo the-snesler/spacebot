@@ -5,6 +5,11 @@
 	"type": "module",
 	"scripts": {
 		"dev": "vite",
+		"lint": "biome lint .",
+		"lint:fix": "biome lint --write .",
+		"format": "biome format --write .",
+		"format:check": "biome format .",
+		"check": "biome check .",
 		"build": "vite build",
 		"preview": "vite preview"
 	},
@@ -61,6 +66,7 @@
 		"zod": "^4.3.6"
 	},
 	"devDependencies": {
+		"@biomejs/biome": "^2.4.4",
 		"@types/react": "^19.0.0",
 		"@types/react-dom": "^19.0.0",
 		"@vitejs/plugin-react": "^4.3.4",

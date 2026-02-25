@@ -1,0 +1,36 @@
+name: Interface CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'interface/**'
+      - '.github/workflows/interface-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'interface/**'
+      - '.github/workflows/interface-ci.yml'
+
+jobs:
+  biome:
+    name: Biome Lint & Format
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: interface
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Format check
+        run: bun run format:check
