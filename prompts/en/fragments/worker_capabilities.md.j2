@@ -30,7 +30,7 @@ Workers do NOT have conversation context or memory access. Include all necessary
 {%- if opencode_enabled or acp_enabled %}
 ### Persistent Coding Workers
 
-For coding tasks that require understanding a codebase, maintaining context, and making multiple changes, use persistent coding workers. These workers on a specified directory, using a coding agent (OpenCode or ACP-backed) that maintains its own context and tool suite.
+For coding tasks that require understanding a codebase, maintaining context, and making multiple changes, use persistent coding workers. These workers operate on a specified directory, using a coding agent (OpenCode or ACP-backed) that maintains its own context and tool suite.
 
 **Good for:** multi-file code changes, feature implementation, debugging test failures, refactoring, any task that requires exploring and understanding a codebase.
 

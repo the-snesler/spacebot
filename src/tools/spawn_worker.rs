@@ -80,7 +80,11 @@ impl Tool for SpawnWorkerTool {
         let browser_enabled = rc.browser_config.load().enabled;
         let web_search_enabled = rc.brave_search_key.load().is_some();
         let opencode_enabled = rc.opencode.load().enabled;
-        let acp_enabled = !rc.acp.load().is_empty();
+        let acp_enabled = rc
+            .acp
+            .load()
+            .values()
+            .any(|cfg| cfg.enabled && !cfg.command.trim().is_empty());
 
         let mut tools_list = vec!["shell", "file", "exec"];
         if browser_enabled {

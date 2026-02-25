@@ -82,7 +82,7 @@ Workers come loaded with tools for real work:
 - **Shell** — run arbitrary commands with configurable timeouts
 - **File** — read, write, and list files with auto-created directories
 - **Exec** — run specific programs with arguments and environment variables
-- **[OpenCode](https://opencode.ai)** — spawn a full coding agent as a persistent worker with codebase exploration, LSP awareness, and deep context management
+- **Code workers (OpenCode or ACP)** — delegate coding tasks to either [OpenCode](https://opencode.ai) or an [ACP-compatible](https://agentclientprotocol.com/) agent backend, with persistent interactive sessions for multi-step code work
 - **Browser** — headless Chrome automation with an accessibility-tree ref system. Navigate, click, type, screenshot, manage tabs — the LLM addresses elements by short refs (`e0`, `e1`) instead of fragile CSS selectors
 - **[Brave](https://brave.com/search/api/) web search** — search the web with freshness filters, localization, and configurable result count
 
@@ -291,9 +291,7 @@ Workers are pluggable. Any process that accepts a task and reports status can be
 
 **Built-in workers** come with shell, file, exec, and browser tools out of the box. They can write code, run commands, manage files, browse the web — enough to build a whole project from scratch.
 
-**[OpenCode](https://opencode.ai) workers** are a built-in integration that spawns a full OpenCode coding agent as a persistent subprocess. OpenCode brings its own codebase exploration, LSP awareness, and context management — purpose-built for deep coding sessions. When a user asks for a complex refactor or a new feature, the channel can spawn an OpenCode worker that maintains a rich understanding of the codebase across the entire session. Both built-in and OpenCode workers support interactive follow-ups.
-
-**ACP workers** run any Agent Client Protocol-compatible coding agent over stdio, configured by `[defaults.acp.<id>]` entries. The channel can spawn these with `worker_type: "acp"` and optional `acp_id` for backend selection.
+**Code workers** provide two external coding backends: **[OpenCode](https://opencode.ai)** (persistent OpenCode subprocess with codebase-aware sessions) and **[ACP workers](https://agentclientprotocol.com/)** Code workers bring their own codebase exploration, LSP awareness, and context management — purpose-built for deep coding sessions. When a user asks for a complex refactor or a new feature, the channel can spawn a code worker that maintains a rich understanding of the codebase across the entire session. Both built-in and code workers support interactive follow-ups.
 
 ### The Compactor
 
@@ -484,8 +482,7 @@ No server dependencies. Single binary. All data lives in embedded databases in a
 | [Discord Setup](docs/content/docs/(messaging)/discord-setup.mdx) | Discord bot setup guide                                  |
 | [Browser](docs/content/docs/(features)/browser.mdx)              | Headless Chrome for workers                              |
 | [MCP](docs/content/docs/(features)/mcp.mdx)                      | External tool servers via Model Context Protocol         |
-| [OpenCode](docs/content/docs/(features)/opencode.mdx)            | OpenCode as a worker backend                             |
-| [OpenCode](docs/content/docs/(features)/opencode.mdx#acp-workers) | ACP workers and configuration                            |
+| [Code Workers](docs/content/docs/(features)/code-workers.mdx)    | OpenCode and ACP coding worker backends                  |
 | [Philosophy](docs/content/docs/(core)/philosophy.mdx)            | Why Rust                                                 |
 
 ---
