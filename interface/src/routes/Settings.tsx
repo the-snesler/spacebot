@@ -1225,6 +1225,13 @@ function OpenCodeSection({ settings, isLoading }: GlobalSettingsSectionProps) {
 	const [editPerm, setEditPerm] = useState(settings?.opencode?.permissions?.edit ?? "allow");
 	const [bashPerm, setBashPerm] = useState(settings?.opencode?.permissions?.bash ?? "allow");
 	const [webfetchPerm, setWebfetchPerm] = useState(settings?.opencode?.permissions?.webfetch ?? "allow");
+	const [acpWorkers, setAcpWorkers] = useState<Array<{
+		id: string;
+		enabled: boolean;
+		command: string;
+		args: string;
+		timeout: string;
+	}>>([]);
 	const [message, setMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
 
 	useEffect(() => {
@@ -1238,7 +1245,18 @@ function OpenCodeSection({ settings, isLoading }: GlobalSettingsSectionProps) {
 			setBashPerm(settings.opencode.permissions.bash);
 			setWebfetchPerm(settings.opencode.permissions.webfetch);
 		}
-	}, [settings?.opencode]);
+
+		const rows = Object.entries(settings?.acp ?? {})
+			.sort(([a], [b]) => a.localeCompare(b))
+			.map(([id, config]) => ({
+				id,
+				enabled: config.enabled,
+				command: config.command,
+				args: config.args.join(", "),
+				timeout: config.timeout.toString(),
+			}));
+		setAcpWorkers(rows);
+	}, [settings?.opencode, settings?.acp]);
 
 	const updateMutation = useMutation({
 		mutationFn: api.updateGlobalSettings,
@@ -1272,6 +1290,37 @@ function OpenCodeSection({ settings, isLoading }: GlobalSettingsSectionProps) {
 			return;
 		}
 
+		const acpPayload: Record<string, { enabled: boolean; command: string; args: string[]; timeout: number }> = {};
+		const seenIds = new Set<string>();
+		for (const worker of acpWorkers) {
+			const id = worker.id.trim();
+			if (!id) {
+				setMessage({ text: "ACP worker ID cannot be empty", type: "error" });
+				return;
+			}
+			if (seenIds.has(id)) {
+				setMessage({ text: `Duplicate ACP worker ID: ${id}`, type: "error" });
+				return;
+			}
+			seenIds.add(id);
+
+			const timeoutValue = parseInt(worker.timeout, 10);
+			if (isNaN(timeoutValue) || timeoutValue < 1) {
+				setMessage({ text: `ACP timeout must be at least 1 for ${id}`, type: "error" });
+				return;
+			}
+
+			acpPayload[id] = {
+				enabled: worker.enabled,
+				command: worker.command.trim(),
+				args: worker.args
+					.split(",")
+					.map((value) => value.trim())
+					.filter((value) => value.length > 0),
+				timeout: timeoutValue,
+			};
+		}
+
 		updateMutation.mutate({
 			opencode: {
 				enabled,
@@ -1285,15 +1334,46 @@ function OpenCodeSection({ settings, isLoading }: GlobalSettingsSectionProps) {
 					webfetch: webfetchPerm,
 				},
 			},
+			acp: acpPayload,
 		});
+	};
+
+	const addAcpWorker = () => {
+		let counter = 1;
+		let candidateId = `worker-${counter}`;
+		while (acpWorkers.some((worker) => worker.id === candidateId)) {
+			counter += 1;
+			candidateId = `worker-${counter}`;
+		}
+
+		setAcpWorkers([
+			...acpWorkers,
+			{ id: candidateId, enabled: true, command: "", args: "", timeout: "300" },
+		]);
+	};
+
+	const updateAcpWorker = (
+		index: number,
+		field: "id" | "enabled" | "command" | "args" | "timeout",
+		value: string | boolean,
+	) => {
+		setAcpWorkers((current) =>
+			current.map((worker, workerIndex) =>
+				workerIndex === index ? { ...worker, [field]: value } : worker,
+			),
+		);
+	};
+
+	const removeAcpWorker = (index: number) => {
+		setAcpWorkers((current) => current.filter((_, workerIndex) => workerIndex !== index));
 	};
 
 	return (
 		<div className="mx-auto max-w-2xl px-6 py-6">
 			<div className="mb-6">
-				<h2 className="font-plex text-sm font-semibold text-ink">OpenCode Workers</h2>
+				<h2 className="font-plex text-sm font-semibold text-ink">Coding Workers</h2>
 				<p className="mt-1 text-sm text-ink-dull">
-					Spawn <a href="https://opencode.ai" target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">OpenCode</a> coding agents as worker subprocesses. Requires the <code className="rounded bg-app-box px-1 py-0.5 text-tiny text-ink-dull">opencode</code> binary on PATH or a custom path below.
+					Configure coding worker backends available to <code className="rounded bg-app-box px-1 py-0.5 text-tiny text-ink-dull">spawn_worker</code>: OpenCode and ACP profiles.
 				</p>
 			</div>
 
@@ -1304,6 +1384,13 @@ function OpenCodeSection({ settings, isLoading }: GlobalSettingsSectionProps) {
 				</div>
 			) : (
 				<div className="flex flex-col gap-4">
+					<div className="rounded-lg border border-app-line bg-app-box p-4">
+						<h3 className="text-sm font-medium text-ink">OpenCode</h3>
+						<p className="mt-0.5 text-sm text-ink-dull">
+							Spawn <a href="https://opencode.ai" target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">OpenCode</a> coding agents as worker subprocesses.
+						</p>
+					</div>
+
 					{/* Enable toggle */}
 					<div className="rounded-lg border border-app-line bg-app-box p-4">
 						<label className="flex items-center gap-3">
@@ -1414,6 +1501,72 @@ function OpenCodeSection({ settings, isLoading }: GlobalSettingsSectionProps) {
 							</div>
 						</>
 					)}
+
+					<div className="rounded-lg border border-app-line bg-app-box p-4">
+						<div className="flex items-center justify-between">
+							<div>
+								<h3 className="text-sm font-medium text-ink">ACP Workers</h3>
+								<p className="mt-0.5 text-sm text-ink-dull">
+									Each entry maps to <code className="rounded bg-app-box px-1 py-0.5 text-tiny text-ink-dull">[defaults.acp.&lt;id&gt;]</code>. Use <code className="rounded bg-app-box px-1 py-0.5 text-tiny text-ink-dull">worker_type: "acp"</code> and optional <code className="rounded bg-app-box px-1 py-0.5 text-tiny text-ink-dull">acp_id</code>.
+								</p>
+							</div>
+							<Button variant="secondary" size="sm" onClick={addAcpWorker}>
+								Add ACP Worker
+							</Button>
+						</div>
+
+						<div className="mt-4 flex flex-col gap-3">
+							{acpWorkers.length === 0 ? (
+								<p className="text-sm text-ink-dull">No ACP workers configured.</p>
+							) : (
+								acpWorkers.map((worker, index) => (
+									<div key={`${worker.id}-${index}`} className="rounded-md border border-app-line bg-app p-3">
+										<div className="grid grid-cols-2 gap-3">
+											<label className="block">
+												<span className="text-tiny font-medium text-ink-dull">ID</span>
+												<Input value={worker.id} onChange={(e) => updateAcpWorker(index, "id", e.target.value)} className="mt-1" />
+											</label>
+											<label className="block">
+												<span className="text-tiny font-medium text-ink-dull">Command</span>
+												<Input value={worker.command} onChange={(e) => updateAcpWorker(index, "command", e.target.value)} placeholder="claude" className="mt-1" />
+											</label>
+											<label className="block col-span-2">
+												<span className="text-tiny font-medium text-ink-dull">Args (comma-separated)</span>
+												<Input value={worker.args} onChange={(e) => updateAcpWorker(index, "args", e.target.value)} placeholder="--acp" className="mt-1" />
+											</label>
+										</div>
+
+										<div className="mt-3 flex items-center justify-between">
+											<label className="flex items-center gap-2">
+												<input
+													type="checkbox"
+													checked={worker.enabled}
+													onChange={(e) => updateAcpWorker(index, "enabled", e.target.checked)}
+													className="h-4 w-4"
+												/>
+												<span className="text-sm text-ink">Enabled</span>
+											</label>
+											<div className="flex items-center gap-3">
+												<label className="flex items-center gap-2">
+													<span className="text-tiny font-medium text-ink-dull">Timeout (s)</span>
+													<Input
+														type="number"
+														value={worker.timeout}
+														onChange={(e) => updateAcpWorker(index, "timeout", e.target.value)}
+														min="1"
+														className="w-24"
+													/>
+												</label>
+												<Button variant="secondary" size="sm" onClick={() => removeAcpWorker(index)}>
+													Remove
+												</Button>
+											</div>
+										</div>
+									</div>
+								))
+							)}
+						</div>
+					</div>
 
 					<Button onClick={handleSave} loading={updateMutation.isPending}>
 						Save Changes

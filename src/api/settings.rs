@@ -4,6 +4,7 @@ use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 #[derive(Serialize)]
@@ -14,6 +15,7 @@ pub(super) struct GlobalSettingsResponse {
     api_bind: String,
     worker_log_mode: String,
     opencode: OpenCodeSettingsResponse,
+    acp: HashMap<String, AcpSettingsResponse>,
 }
 
 #[derive(Serialize)]
@@ -33,6 +35,14 @@ pub(super) struct OpenCodePermissionsResponse {
     webfetch: String,
 }
 
+#[derive(Serialize)]
+pub(super) struct AcpSettingsResponse {
+    enabled: bool,
+    command: String,
+    args: Vec<String>,
+    timeout: u64,
+}
+
 #[derive(Deserialize)]
 pub(super) struct GlobalSettingsUpdate {
     brave_search_key: Option<String>,
@@ -41,6 +51,7 @@ pub(super) struct GlobalSettingsUpdate {
     api_bind: Option<String>,
     worker_log_mode: Option<String>,
     opencode: Option<OpenCodeSettingsUpdate>,
+    acp: Option<HashMap<String, AcpSettingsUpdate>>,
 }
 
 #[derive(Deserialize)]
@@ -58,6 +69,14 @@ pub(super) struct OpenCodePermissionsUpdate {
     edit: Option<String>,
     bash: Option<String>,
     webfetch: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub(super) struct AcpSettingsUpdate {
+    enabled: Option<bool>,
+    command: Option<String>,
+    args: Option<Vec<String>>,
+    timeout: Option<u64>,
 }
 
 #[derive(Serialize)]
@@ -88,7 +107,7 @@ pub(super) async fn get_global_settings(
 ) -> Result<Json<GlobalSettingsResponse>, StatusCode> {
     let config_path = state.config_path.read().await.clone();
 
-    let (brave_search_key, api_enabled, api_port, api_bind, worker_log_mode, opencode) =
+    let (brave_search_key, api_enabled, api_port, api_bind, worker_log_mode, opencode, acp) =
         if config_path.exists() {
             let content = tokio::fs::read_to_string(&config_path)
                 .await
@@ -138,6 +157,10 @@ pub(super) async fn get_global_settings(
 
             let opencode_table = doc.get("defaults").and_then(|d| d.get("opencode"));
             let opencode_perms = opencode_table.and_then(|o| o.get("permissions"));
+            let acp_table = doc
+                .get("defaults")
+                .and_then(|d| d.get("acp"))
+                .and_then(|v| v.as_table());
             let opencode = OpenCodeSettingsResponse {
                 enabled: opencode_table
                     .and_then(|o| o.get("enabled"))
@@ -182,6 +205,47 @@ pub(super) async fn get_global_settings(
                 },
             };
 
+            let mut acp = HashMap::new();
+            if let Some(table) = acp_table {
+                for (id, item) in table {
+                    if let Some(agent_table) = item.as_table() {
+                        let args = agent_table
+                            .get("args")
+                            .and_then(|v| v.as_array())
+                            .map(|array| {
+                                array
+                                    .iter()
+                                    .filter_map(|value| value.as_str().map(ToString::to_string))
+                                    .collect::<Vec<_>>()
+                            })
+                            .unwrap_or_default();
+
+                        let timeout = agent_table
+                            .get("timeout")
+                            .and_then(|v| v.as_integer())
+                            .and_then(|value| u64::try_from(value).ok())
+                            .unwrap_or(300);
+
+                        acp.insert(
+                            id.to_string(),
+                            AcpSettingsResponse {
+                                enabled: agent_table
+                                    .get("enabled")
+                                    .and_then(|v| v.as_bool())
+                                    .unwrap_or(true),
+                                command: agent_table
+                                    .get("command")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or_default()
+                                    .to_string(),
+                                args,
+                                timeout,
+                            },
+                        );
+                    }
+                }
+            }
+
             (
                 brave_search,
                 api_enabled,
@@ -189,6 +253,7 @@ pub(super) async fn get_global_settings(
                 api_bind,
                 worker_log_mode,
                 opencode,
+                acp,
             )
         } else {
             (
@@ -209,6 +274,7 @@ pub(super) async fn get_global_settings(
                         webfetch: "allow".to_string(),
                     },
                 },
+                HashMap::new(),
             )
         };
 
@@ -219,6 +285,7 @@ pub(super) async fn get_global_settings(
         api_bind,
         worker_log_mode,
         opencode,
+        acp,
     }))
 }
 
@@ -325,6 +392,39 @@ pub(super) async fn update_global_settings(
             }
             if let Some(webfetch) = permissions.webfetch {
                 doc["defaults"]["opencode"]["permissions"]["webfetch"] = toml_edit::value(webfetch);
+            }
+        }
+    }
+
+    if let Some(acp_configs) = request.acp {
+        if doc.get("defaults").is_none() {
+            doc["defaults"] = toml_edit::Item::Table(toml_edit::Table::new());
+        }
+        if doc["defaults"].get("acp").is_none() {
+            doc["defaults"]["acp"] = toml_edit::Item::Table(toml_edit::Table::new());
+        }
+
+        if let Some(acp_table) = doc["defaults"]["acp"].as_table_mut() {
+            acp_table.clear();
+
+            for (id, config) in acp_configs {
+                if id.trim().is_empty() {
+                    continue;
+                }
+
+                acp_table.insert(&id, toml_edit::Item::Table(toml_edit::Table::new()));
+
+                if let Some(agent_table) = acp_table.get_mut(&id).and_then(|item| item.as_table_mut()) {
+                    agent_table["enabled"] = toml_edit::value(config.enabled.unwrap_or(true));
+                    agent_table["command"] = toml_edit::value(config.command.unwrap_or_default());
+
+                    let mut array = toml_edit::Array::new();
+                    for argument in config.args.unwrap_or_default() {
+                        array.push(argument);
+                    }
+                    agent_table["args"] = toml_edit::Item::Value(toml_edit::Value::Array(array));
+                    agent_table["timeout"] = toml_edit::value(config.timeout.unwrap_or(300) as i64);
+                }
             }
         }
     }
