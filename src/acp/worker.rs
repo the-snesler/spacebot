@@ -149,7 +149,7 @@ impl AcpWorker {
         ));
 
         let timeout = self.acp.timeout.max(1);
-        let (result, session_id) = tokio::task::LocalSet::new()
+        let run_result = tokio::task::LocalSet::new()
             .run_until(async {
                 let (connection, io_task) = ClientSideConnection::new(
                     acp_client.clone(),
@@ -213,6 +213,8 @@ impl AcpWorker {
                     result_text = format!("ACP worker completed with stop reason: {:?}", prompt_response.stop_reason);
                 }
 
+                self.send_result(&result_text, true, true);
+
                 if let Some(mut input_rx) = self.input_rx.take() {
                     self.send_status("waiting for follow-up");
                     while let Some(message) = input_rx.recv().await {
@@ -229,22 +231,33 @@ impl AcpWorker {
                                 follow_up_response.stop_reason
                             );
                         }
+                        self.send_result(&result_text, true, true);
                         self.send_status("waiting for follow-up");
                     }
                 }
 
                 Ok::<(String, String), anyhow::Error>((result_text, session_id))
             })
-            .await?;
+            .await;
 
-        let _ = child.kill().await;
+        shutdown_child(&mut child, self.id).await;
 
-        self.send_status("completed");
+        match run_result {
+            Ok((result, session_id)) => {
+                self.send_status("completed");
+                self.send_complete(&result, false, true);
 
-        Ok(AcpWorkerResult {
-            session_id,
-            result_text: result,
-        })
+                Ok(AcpWorkerResult {
+                    session_id,
+                    result_text: result,
+                })
+            }
+            Err(error) => {
+                self.send_status("failed");
+                self.send_complete(&format!("ACP worker failed: {error}"), true, false);
+                Err(error)
+            }
+        }
     }
 
     fn send_status(&self, status: &str) {
@@ -254,6 +267,45 @@ impl AcpWorker {
             channel_id: self.channel_id.clone(),
             status: status.to_string(),
         });
+    }
+
+    fn send_result(&self, result: &str, notify: bool, success: bool) {
+        let _ = self.event_tx.send(ProcessEvent::WorkerResult {
+            agent_id: self.agent_id.clone(),
+            worker_id: self.id,
+            channel_id: self.channel_id.clone(),
+            result: result.to_string(),
+            notify,
+            success,
+        });
+    }
+
+    fn send_complete(&self, result: &str, notify: bool, success: bool) {
+        let _ = self.event_tx.send(ProcessEvent::WorkerComplete {
+            agent_id: self.agent_id.clone(),
+            worker_id: self.id,
+            channel_id: self.channel_id.clone(),
+            result: result.to_string(),
+            notify,
+            success,
+        });
+    }
+}
+
+async fn shutdown_child(child: &mut Child, worker_id: WorkerId) {
+    match child.try_wait() {
+        Ok(Some(_)) => {}
+        Ok(None) => {
+            if let Err(error) = child.kill().await {
+                tracing::debug!(worker_id = %worker_id, %error, "failed to kill ACP child");
+            }
+            if let Err(error) = child.wait().await {
+                tracing::debug!(worker_id = %worker_id, %error, "failed waiting for ACP child exit");
+            }
+        }
+        Err(error) => {
+            tracing::debug!(worker_id = %worker_id, %error, "failed to check ACP child status");
+        }
     }
 }
 
@@ -298,6 +350,7 @@ struct SpacebotAcpClient {
     workspace_root: PathBuf,
     terminals: Arc<Mutex<HashMap<String, Arc<TerminalEntry>>>>,
     collected_text: Arc<Mutex<String>>,
+    thought_buffer: Arc<Mutex<String>>,
 }
 
 impl SpacebotAcpClient {
@@ -316,6 +369,7 @@ impl SpacebotAcpClient {
             workspace_root,
             terminals: Arc::new(Mutex::new(HashMap::new())),
             collected_text: Arc::new(Mutex::new(String::new())),
+            thought_buffer: Arc::new(Mutex::new(String::new())),
         }
     }
 
@@ -325,6 +379,12 @@ impl SpacebotAcpClient {
 
     async fn take_text(&self) -> String {
         self.collected_text.lock().await.clone()
+    }
+
+    async fn flush_thoughts(&self) {
+        let mut buffer = self.thought_buffer.lock().await;
+        self.send_status(buffer.as_str());
+        buffer.clear();
     }
 
     fn send_status(&self, status: impl Into<String>) {
@@ -429,30 +489,35 @@ impl agent_client_protocol::Client for SpacebotAcpClient {
     ) -> agent_client_protocol::Result<()> {
         match args.update {
             SessionUpdate::AgentMessageChunk(ContentChunk { content, .. }) => {
+                self.flush_thoughts().await;
                 if let ContentBlock::Text(text_content) = content {
                     let mut text = self.collected_text.lock().await;
                     text.push_str(&text_content.text);
                 }
             }
+            SessionUpdate::AgentThoughtChunk(ContentChunk { content, .. }) => {
+                if let ContentBlock::Text(text_content) = content {
+                    let mut buffer = self.thought_buffer.lock().await;
+                    buffer.push_str(&text_content.text);
+                }
+            }
             SessionUpdate::ToolCall(tool_call) => {
+                self.flush_thoughts().await;
                 self.send_status(format!(
                     "tool {}: {:?}",
                     tool_call.title, tool_call.status
                 ));
             }
             SessionUpdate::ToolCallUpdate(update) => {
+                self.flush_thoughts().await;
                 if let Some(status) = update.fields.status {
-                    let status_text = match status {
-                        ToolCallStatus::Pending => "tool pending",
-                        ToolCallStatus::InProgress => "tool running",
-                        ToolCallStatus::Completed => "tool completed",
-                        ToolCallStatus::Failed => "tool failed",
-                        _ => "tool status updated",
-                    };
-                    self.send_status(status_text);
+                    if status == ToolCallStatus::Failed {
+                        self.send_status("tool failed");
+                    }
                 }
             }
             SessionUpdate::Plan(_) => {
+                self.flush_thoughts().await;
                 self.send_status("planning");
             }
             _ => {}
