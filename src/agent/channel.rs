@@ -2427,7 +2427,9 @@ pub async fn spawn_acp_worker_from_state(
                             success: false,
                         })
                         .ok();
-                    Err(anyhow::anyhow!("ACP worker thread join error: {join_error}"))
+                    Err(anyhow::anyhow!(
+                        "ACP worker thread join error: {join_error}"
+                    ))
                 }
             }
         }

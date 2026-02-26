@@ -406,7 +406,7 @@ async fn prompt_once(
     if let Some(token) = cancellation_token {
         tokio::select! {
             _ = token.cancelled() => {
-                return Err(anyhow::Error::new(Cancelled));
+                Err(anyhow::Error::new(Cancelled))
             }
             response = tokio::time::timeout(
                 std::time::Duration::from_secs(timeout_seconds),
