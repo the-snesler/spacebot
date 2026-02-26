@@ -405,6 +405,16 @@ pub(super) async fn update_global_settings(
         }
 
         if let Some(acp_table) = doc["defaults"]["acp"].as_table_mut() {
+            // Remove stale entries not present in the incoming config.
+            let incoming_ids: std::collections::HashSet<_> =
+                acp_configs.keys().map(String::as_str).collect();
+            let existing_ids: Vec<_> = acp_table.iter().map(|(k, _)| k.to_string()).collect();
+            for existing_id in existing_ids {
+                if !incoming_ids.contains(existing_id.as_str()) {
+                    acp_table.remove(&existing_id);
+                }
+            }
+
             for (id, config) in acp_configs {
                 if id.trim().is_empty() {
                     continue;

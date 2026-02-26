@@ -592,7 +592,7 @@ pub struct AcpAgentConfig {
     pub args: Vec<String>,
     /// Environment variables set when spawning the agent process.
     pub env: HashMap<String, String>,
-    /// Session timeout in seconds. `None` uses a default of 300s.
+    /// Session timeout in seconds. Defaults to 300s.
     pub timeout: u64,
 }
 
@@ -3323,8 +3323,11 @@ impl Config {
                     let resolved_command = toml_acp
                         .command
                         .as_deref()
-                        .and_then(resolve_env_value)
-                        .or_else(|| toml_acp.command.clone())
+                        .and_then(|cmd| {
+                            // Only fall back to the raw value if it's not an env: reference.
+                            resolve_env_value(cmd)
+                                .or_else(|| (!cmd.starts_with("env:")).then(|| cmd.to_string()))
+                        })
                         .or_else(|| base_entry.map(|b| b.command.clone()))
                         .unwrap_or_default();
                     merged.insert(
@@ -3512,8 +3515,12 @@ impl Config {
                                 let resolved_command = toml_acp
                                     .command
                                     .as_deref()
-                                    .and_then(resolve_env_value)
-                                    .or_else(|| toml_acp.command.clone())
+                                    .and_then(|cmd| {
+                                        // Only fall back to the raw value if it's not an env: reference.
+                                        resolve_env_value(cmd).or_else(|| {
+                                            (!cmd.starts_with("env:")).then(|| cmd.to_string())
+                                        })
+                                    })
                                     .or_else(|| base_entry.map(|entry| entry.command.clone()))
                                     .unwrap_or_default();
                                 (

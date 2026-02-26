@@ -6,4 +6,4 @@
 
 pub mod worker;
 
-pub use worker::{AcpWorker, AcpWorkerResult};
+pub use worker::{AcpWorker, AcpWorkerResult, Cancelled};

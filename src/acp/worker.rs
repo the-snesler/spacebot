@@ -33,6 +33,18 @@ use uuid::Uuid;
 const MAX_STDERR_LOG_BYTES: usize = 64 * 1024;
 const DEFAULT_TERMINAL_OUTPUT_LIMIT_BYTES: usize = 64 * 1024;
 
+/// Marker type for cancellation errors, enabling typed downcast checks.
+#[derive(Debug)]
+pub struct Cancelled;
+
+impl std::fmt::Display for Cancelled {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "ACP worker cancelled")
+    }
+}
+
+impl std::error::Error for Cancelled {}
+
 /// ACP-backed worker.
 pub struct AcpWorker {
     pub id: WorkerId,
@@ -99,7 +111,7 @@ impl AcpWorker {
             .as_ref()
             .is_some_and(CancellationToken::is_cancelled)
         {
-            anyhow::bail!("ACP worker cancelled")
+            return Err(anyhow::Error::new(Cancelled));
         }
 
         Ok(())
@@ -316,7 +328,7 @@ impl AcpWorker {
                 Ok(result)
             }
             Err(error) => {
-                if error.to_string().contains("cancelled") {
+                if error.downcast_ref::<Cancelled>().is_some() {
                     self.send_status("cancelled");
                     self.send_complete("ACP worker cancelled", false, false);
                 } else {
@@ -394,7 +406,7 @@ async fn prompt_once(
     if let Some(token) = cancellation_token {
         tokio::select! {
             _ = token.cancelled() => {
-                anyhow::bail!("ACP worker cancelled")
+                return Err(anyhow::Error::new(Cancelled));
             }
             response = tokio::time::timeout(
                 std::time::Duration::from_secs(timeout_seconds),
@@ -448,11 +460,17 @@ impl TerminalEntry {
 
     /// Wait for the process to exit, caching and returning the status.
     async fn wait_for_exit(&self) -> std::io::Result<std::process::ExitStatus> {
-        let mut stored = self.exit_status.lock().await;
-        if let Some(status) = *stored {
-            return Ok(status);
+        // Check if we already have a cached exit status (short-lived lock).
+        {
+            let stored = self.exit_status.lock().await;
+            if let Some(status) = *stored {
+                return Ok(status);
+            }
         }
+        // Wait for the child to exit without holding the exit_status lock.
         let status = self.child.lock().await.wait().await?;
+        // Cache the exit status.
+        let mut stored = self.exit_status.lock().await;
         *stored = Some(status);
         Ok(status)
     }

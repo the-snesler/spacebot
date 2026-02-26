@@ -2387,11 +2387,16 @@ pub async fn spawn_acp_worker_from_state(
         worker_type = "acp",
         acp_id = %acp_label,
     );
+    let event_tx_for_task = state.deps.event_tx.clone();
+    let agent_id_for_task = state.deps.agent_id.clone();
+    let channel_id_for_task = Some(state.channel_id.clone());
     let handle = spawn_worker_task(
         worker_id,
         state.deps.event_tx.clone(),
         state.deps.agent_id.clone(),
         Some(state.channel_id.clone()),
+        // ACP workers emit their own WorkerComplete via send_complete(), so we
+        // only need the wrapper to emit on outer errors (runtime build, join).
         false,
         async move {
             let result = tokio::task::spawn_blocking(move || -> anyhow::Result<String> {
@@ -2405,10 +2410,26 @@ pub async fn spawn_acp_worker_from_state(
                     Ok::<String, anyhow::Error>(worker_result.result_text)
                 })
             })
-            .await
-            .map_err(|error| anyhow::anyhow!("ACP worker thread join error: {error}"))??;
+            .await;
 
-            Ok::<String, anyhow::Error>(result)
+            match result {
+                Ok(inner) => inner,
+                Err(join_error) => {
+                    // Outer join error: ACP worker panicked or was cancelled.
+                    // Emit WorkerComplete since the inner worker didn't get to.
+                    event_tx_for_task
+                        .send(crate::ProcessEvent::WorkerComplete {
+                            agent_id: agent_id_for_task,
+                            worker_id,
+                            channel_id: channel_id_for_task,
+                            result: format!("ACP worker thread join error: {join_error}"),
+                            notify: true,
+                            success: false,
+                        })
+                        .ok();
+                    Err(anyhow::anyhow!("ACP worker thread join error: {join_error}"))
+                }
+            }
         }
         .instrument(worker_span),
     );
@@ -2486,14 +2507,16 @@ where
         }
 
         if emit_completion_event {
-            let _ = event_tx.send(ProcessEvent::WorkerComplete {
-                agent_id,
-                worker_id,
-                channel_id,
-                result: result_text,
-                notify,
-                success,
-            });
+            event_tx
+                .send(ProcessEvent::WorkerComplete {
+                    agent_id,
+                    worker_id,
+                    channel_id,
+                    result: result_text,
+                    notify,
+                    success,
+                })
+                .ok();
         }
     })
 }
