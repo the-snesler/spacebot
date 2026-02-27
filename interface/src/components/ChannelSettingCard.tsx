@@ -1,7 +1,14 @@
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, type PlatformStatus, type BindingInfo } from "@/api/client";
+import {
+	api,
+	type PlatformStatus,
+	type BindingInfo,
+	type CreateBindingRequest,
+	type UpdateBindingRequest,
+	type DeleteBindingRequest,
+} from "@/api/client";
 import {
 	Button,
 	Input,
@@ -23,6 +30,16 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faChevronDown } from "@fortawesome/free-solid-svg-icons";
 
 type Platform = "discord" | "slack" | "telegram" | "twitch" | "webhook";
+
+type BindingFormState = {
+	agent_id: string;
+	guild_id: string;
+	workspace_id: string;
+	chat_id: string;
+	channel_ids: string[];
+	require_mention: boolean;
+	dm_allowed_users: string[];
+};
 
 interface ChannelSettingCardProps {
 	platform: Platform;
@@ -57,7 +74,7 @@ export function ChannelSettingCard({
 		null,
 	);
 	const [addingBinding, setAddingBinding] = useState(false);
-	const [bindingForm, setBindingForm] = useState({
+	const [bindingForm, setBindingForm] = useState<BindingFormState>({
 		agent_id: "main",
 		guild_id: "",
 		workspace_id: "",
@@ -183,7 +200,7 @@ export function ChannelSettingCard({
 	}
 
 	function handleSaveCredentials() {
-		const request: any = { agent_id: "main", channel: platform };
+		const request: CreateBindingRequest = { agent_id: "main", channel: platform };
 		if (platform === "discord") {
 			if (!credentialInputs.discord_token?.trim()) return;
 			request.platform_credentials = {
@@ -222,7 +239,10 @@ export function ChannelSettingCard({
 	}
 
 	function handleAddBinding() {
-		const request: any = { agent_id: bindingForm.agent_id, channel: platform };
+		const request: CreateBindingRequest = {
+			agent_id: bindingForm.agent_id,
+			channel: platform,
+		};
 		if (platform === "discord" && bindingForm.guild_id.trim())
 			request.guild_id = bindingForm.guild_id.trim();
 		if (platform === "slack" && bindingForm.workspace_id.trim())
@@ -240,7 +260,7 @@ export function ChannelSettingCard({
 
 	function handleUpdateBinding() {
 		if (!editingBinding) return;
-		const request: any = {
+		const request: UpdateBindingRequest = {
 			original_agent_id: editingBinding.agent_id,
 			original_channel: editingBinding.channel,
 			original_guild_id: editingBinding.guild_id || undefined,
@@ -263,7 +283,7 @@ export function ChannelSettingCard({
 	}
 
 	function handleDeleteBinding(binding: BindingInfo) {
-		const request: any = {
+		const request: DeleteBindingRequest = {
 			agent_id: binding.agent_id,
 			channel: binding.channel,
 		};
@@ -783,15 +803,8 @@ function BindingsSection({
 	isEditingOrAdding: boolean;
 	editingBinding: BindingInfo | null;
 	bindingForm: {
-		agent_id: string;
-		guild_id: string;
-		workspace_id: string;
-		chat_id: string;
-		channel_ids: string[];
-		require_mention: boolean;
-		dm_allowed_users: string[];
-	};
-	setBindingForm: (form: any) => void;
+	} & BindingFormState;
+	setBindingForm: React.Dispatch<React.SetStateAction<BindingFormState>>;
 	onStartAdd: () => void;
 	onStartEdit: (binding: BindingInfo) => void;
 	onCancelEdit: () => void;
@@ -814,9 +827,9 @@ function BindingsSection({
 			{/* Binding list */}
 			{bindings.length > 0 ? (
 				<div className="rounded-md border border-app-line bg-app-box">
-					{bindings.map((binding, idx) => (
+					{bindings.map((binding) => (
 						<div
-							key={idx}
+							key={`${binding.agent_id}:${binding.channel}:${binding.guild_id ?? ""}:${binding.workspace_id ?? ""}:${binding.chat_id ?? ""}`}
 							className="flex items-center gap-2 border-b border-app-line/50 px-3 py-2 last:border-b-0"
 						>
 							<div className="flex-1 min-w-0">
@@ -914,14 +927,8 @@ function BindingForm({
 	platform: Platform;
 	agents: { id: string }[];
 	bindingForm: {
-		agent_id: string;
-		guild_id: string;
-		workspace_id: string;
-		chat_id: string;
-		channel_ids: string[];
-		dm_allowed_users: string[];
-	};
-	setBindingForm: (form: any) => void;
+	} & BindingFormState;
+	setBindingForm: React.Dispatch<React.SetStateAction<BindingFormState>>;
 	editing: boolean;
 	onSave: () => void;
 	onCancel: () => void;

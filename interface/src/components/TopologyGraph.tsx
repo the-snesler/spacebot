@@ -1294,13 +1294,13 @@ function TopologyGraphInner({ activeEdges, agents }: TopologyGraphInnerProps) {
 				}
 			}
 		},
-		[onNodesChange, nodes, groups, queryClient],
+		[onNodesChange, nodes, groups, queryClient, setNodes],
 	);
 
 	const handleCreateGroup = useCallback(() => {
 		const name = `Group ${groups.length + 1}`;
 		createGroup.mutate(name);
-	}, [data, createGroup]);
+	}, [createGroup, groups.length]);
 
 	if (isLoading) {
 		return (

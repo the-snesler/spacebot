@@ -43,9 +43,9 @@ export const Slider = React.forwardRef<
 	>
 		<SliderPrimitive.Track className={cx(sliderTrackStyles())}>
 			<SliderPrimitive.Range className={cx(sliderRangeStyles())} />
-			{marks?.map((mark, index) => (
+			{marks?.map((mark) => (
 				<div
-					key={index}
+					key={`mark-${mark}`}
 					className={cx(sliderMarkStyles())}
 					style={{
 						left: `${mark}%`,
@@ -53,15 +53,12 @@ export const Slider = React.forwardRef<
 				/>
 			))}
 		</SliderPrimitive.Track>
-		{props.defaultValue?.map((_, index) => (
-			<SliderPrimitive.Thumb key={index} className={cx(sliderThumbStyles())} />
-		)) ||
-			props.value?.map((_, index) => (
-				<SliderPrimitive.Thumb
-					key={index}
-					className={cx(sliderThumbStyles())}
-				/>
-			)) || <SliderPrimitive.Thumb className={cx(sliderThumbStyles())} />}
+		{(props.defaultValue ?? props.value)?.map((thumbValue) => (
+			<SliderPrimitive.Thumb
+				key={`thumb-${thumbValue}`}
+				className={cx(sliderThumbStyles())}
+			/>
+		)) ?? <SliderPrimitive.Thumb className={cx(sliderThumbStyles())} />}
 	</SliderPrimitive.Root>
 ));
 

@@ -1,4 +1,5 @@
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import type { IconProp } from "@fortawesome/fontawesome-svg-core";
 import {
 	faDiscord,
 	faSlack,
@@ -24,7 +25,7 @@ export function PlatformIcon({
 	className = "text-ink-faint",
 	size = "1x",
 }: PlatformIconProps) {
-	const iconMap: Record<string, any> = {
+	const iconMap: Record<string, IconProp> = {
 		discord: faDiscord,
 		slack: faSlack,
 		telegram: faTelegram,

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Graph from "graphology";
 import Sigma from "sigma";
 import { EdgeArrowProgram } from "sigma/rendering";
@@ -73,12 +73,6 @@ export function MemoryGraph({ agentId, sort, typeFilter }: MemoryGraphProps) {
 	const [expandingNode, setExpandingNode] = useState<string | null>(null);
 	// Track loaded node IDs so we can exclude them when fetching neighbors
 	const loadedNodeIds = useRef<Set<string>>(new Set());
-
-	// Memoize the graph data key to refetch when filters change
-	const queryKey = useMemo(
-		() => [agentId, sort, typeFilter],
-		[agentId, sort, typeFilter],
-	);
 
 	const cleanup = useCallback(() => {
 		if (layoutRef.current) {
@@ -218,7 +212,64 @@ export function MemoryGraph({ agentId, sort, typeFilter }: MemoryGraphProps) {
 			cancelled = true;
 			cleanup();
 		};
-	}, [queryKey, cleanup, agentId, sort, typeFilter]);
+	}, [cleanup, agentId, sort, typeFilter, hoveredNode]);
+
+	const expandNeighbors = useCallback(
+		async (nodeId: string) => {
+			if (expandingNode) return;
+			setExpandingNode(nodeId);
+
+			try {
+				const exclude = Array.from(loadedNodeIds.current);
+				const data = await api.memoryGraphNeighbors(agentId, nodeId, {
+					depth: 1,
+					exclude,
+				});
+
+				const graph = graphRef.current;
+				if (!graph) return;
+
+				// Add new nodes
+				for (const node of data.nodes) {
+					if (!graph.hasNode(node.id)) {
+						const parentAttrs = graph.getNodeAttributes(nodeId);
+						const size = 3 + node.importance * 8;
+						graph.addNode(node.id, {
+							label: truncateLabel(node.content),
+							size,
+							color: NODE_COLORS[node.memory_type] ?? "#666666",
+							x: (parentAttrs.x as number) + (Math.random() - 0.5) * 20,
+							y: (parentAttrs.y as number) + (Math.random() - 0.5) * 20,
+							memoryData: node,
+						});
+						loadedNodeIds.current.add(node.id);
+					}
+				}
+
+				// Add new edges
+				addEdgesToGraph(graph, data.edges);
+
+				setNodeCount(graph.order);
+				setEdgeCount(graph.size);
+
+				// Restart layout briefly to settle new nodes
+				const layout = layoutRef.current;
+				if (layout && !layout.isRunning()) {
+					layout.start();
+					setTimeout(() => {
+						if (layout.isRunning()) layout.stop();
+					}, 2000);
+				}
+
+				sigmaRef.current?.refresh();
+			} catch (err) {
+				console.error("Failed to expand neighbors:", err);
+			} finally {
+				setExpandingNode(null);
+			}
+		},
+		[agentId, expandingNode],
+	);
 
 	// Register Sigma event handlers (separate from graph loading to avoid recreating)
 	useEffect(() => {
@@ -285,66 +336,13 @@ export function MemoryGraph({ agentId, sort, typeFilter }: MemoryGraphProps) {
 			sigma.off("leaveNode", handleLeaveNode);
 			sigma.off("clickStage", handleClickStage);
 		};
-	}, [isLoading]);
+	}, [expandNeighbors]);
 
 	// Re-render sigma when hoveredNode changes (for fade effect)
 	useEffect(() => {
+		void hoveredNode;
 		sigmaRef.current?.refresh();
 	}, [hoveredNode]);
-
-	async function expandNeighbors(nodeId: string) {
-		if (expandingNode) return;
-		setExpandingNode(nodeId);
-
-		try {
-			const exclude = Array.from(loadedNodeIds.current);
-			const data = await api.memoryGraphNeighbors(agentId, nodeId, {
-				depth: 1,
-				exclude,
-			});
-
-			const graph = graphRef.current;
-			if (!graph) return;
-
-			// Add new nodes
-			for (const node of data.nodes) {
-				if (!graph.hasNode(node.id)) {
-					const parentAttrs = graph.getNodeAttributes(nodeId);
-					const size = 3 + node.importance * 8;
-					graph.addNode(node.id, {
-						label: truncateLabel(node.content),
-						size,
-						color: NODE_COLORS[node.memory_type] ?? "#666666",
-						x: (parentAttrs.x as number) + (Math.random() - 0.5) * 20,
-						y: (parentAttrs.y as number) + (Math.random() - 0.5) * 20,
-						memoryData: node,
-					});
-					loadedNodeIds.current.add(node.id);
-				}
-			}
-
-			// Add new edges
-			addEdgesToGraph(graph, data.edges);
-
-			setNodeCount(graph.order);
-			setEdgeCount(graph.size);
-
-			// Restart layout briefly to settle new nodes
-			const layout = layoutRef.current;
-			if (layout && !layout.isRunning()) {
-				layout.start();
-				setTimeout(() => {
-					if (layout.isRunning()) layout.stop();
-				}, 2000);
-			}
-
-			sigmaRef.current?.refresh();
-		} catch (err) {
-			console.error("Failed to expand neighbors:", err);
-		} finally {
-			setExpandingNode(null);
-		}
-	}
 
 	return (
 		<div className="relative h-full w-full">
@@ -558,7 +556,7 @@ function truncateLabel(content: string): string {
 	// Take the first line, then cap at 24 chars
 	const firstLine = content.split("\n")[0].trim();
 	if (firstLine.length <= 24) return firstLine;
-	return firstLine.slice(0, 22) + "...";
+	return `${firstLine.slice(0, 22)}...`;
 }
 
 function addEdgesToGraph(graph: Graph, edges: AssociationItem[]) {

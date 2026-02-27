@@ -324,7 +324,7 @@ function BulletinSection({ bulletin }: { bulletin: string }) {
 	const displayText =
 		expanded || !shouldTruncate
 			? bulletin
-			: lines.slice(0, 6).join("\n") + "\n...";
+			: `${lines.slice(0, 6).join("\n")}\n...`;
 
 	return (
 		<div className="mt-6 rounded-xl border border-accent/20 bg-accent/5 p-5">
@@ -592,6 +592,7 @@ function ActivityHeatmap({
 
 	const maxCount = Math.max(...data.map((d) => d.count), 1);
 	const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+	const hours = Array.from({ length: 24 }, (_, hour) => hour);
 
 	// Create a 7x24 grid
 	const getCell = (day: number, hour: number) => {
@@ -610,27 +611,27 @@ function ActivityHeatmap({
 				{/* Hour labels */}
 				<div className="flex gap-1">
 					<div className="w-8 flex-shrink-0" /> {/* Day label spacer */}
-					{Array.from({ length: 24 }, (_, h) => (
+					{hours.map((hour) => (
 						<div
-							key={h}
+							key={`hour-label-${hour}`}
 							className="w-4 flex-shrink-0 text-center text-[10px] text-ink-faint"
 						>
-							{h % 6 === 0 ? h : ""}
+							{hour % 6 === 0 ? hour : ""}
 						</div>
 					))}
 				</div>
 				{/* Heatmap grid */}
 				{days.map((dayLabel, day) => (
-					<div key={day} className="flex items-center gap-1">
+					<div key={dayLabel} className="flex items-center gap-1">
 						<div className="w-8 flex-shrink-0 text-[10px] text-ink-faint">
 							{dayLabel}
 						</div>
 						<div className="flex gap-1">
-							{Array.from({ length: 24 }, (_, hour) => {
+							{hours.map((hour) => {
 								const count = getCell(day, hour);
 								return (
 									<div
-										key={hour}
+										key={`${dayLabel}-${hour}`}
 										title={`${dayLabel} ${hour}:00 - ${count} messages`}
 										className="h-4 w-4 flex-shrink-0 rounded-sm bg-accent transition-opacity hover:ring-1 hover:ring-accent"
 										style={{ opacity: getOpacity(count) }}
@@ -676,8 +677,8 @@ function MemoryDonut({ counts }: { counts: Record<string, number> }) {
 							paddingAngle={2}
 							stroke="none"
 						>
-							{data.map((entry, index) => (
-								<Cell key={`cell-${index}`} fill={entry.color} />
+							{data.map((entry) => (
+								<Cell key={`cell-${entry.name}`} fill={entry.color} />
 							))}
 						</Pie>
 						<Tooltip
@@ -779,7 +780,8 @@ function StatRow({
 }
 
 function formatModelName(model: string): string {
-	const name = model.includes("/") ? model.split("/").pop()! : model;
+	const splitName = model.includes("/") ? model.split("/").pop() : null;
+	const name = splitName ?? model;
 	return name
 		.replace(/-\d{8}$/, "")
 		.replace(/claude-/, "claude-")
@@ -834,7 +836,7 @@ function IdentitySection({
 							{label}
 						</span>
 						<p className="mt-2 line-clamp-4 whitespace-pre-wrap text-sm leading-relaxed text-ink-dull">
-							{content!.trim()}
+							{content?.trim()}
 						</p>
 					</div>
 				))}

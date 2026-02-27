@@ -7,7 +7,13 @@ import "@fontsource/ibm-plex-sans/500.css";
 import "@fontsource/ibm-plex-sans/600.css";
 import "@fontsource/ibm-plex-sans/700.css";
 
-ReactDOM.createRoot(document.getElementById("root")!).render(
+const rootElement = document.getElementById("root");
+
+if (!rootElement) {
+	throw new Error("Root element not found");
+}
+
+ReactDOM.createRoot(rootElement).render(
 	<React.StrictMode>
 		<App />
 	</React.StrictMode>,

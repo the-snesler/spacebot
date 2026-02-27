@@ -214,7 +214,7 @@ export const ProgressSteps: React.FC<ProgressStepsProps> = ({
 
 				return (
 					<div
-						key={index}
+						key={`${step.label}:${step.description ?? ""}`}
 						className={cx(
 							"flex",
 							orientation === "horizontal"

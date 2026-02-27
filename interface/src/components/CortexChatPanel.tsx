@@ -80,6 +80,9 @@ function CortexChatInput({
 		};
 
 		adjustHeight();
+		if (value.length === 0) {
+			textarea.scrollTop = 0;
+		}
 		textarea.addEventListener("input", adjustHeight);
 		return () => textarea.removeEventListener("input", adjustHeight);
 	}, [value]);
@@ -142,6 +145,9 @@ export function CortexChatPanel({
 	const messagesEndRef = useRef<HTMLDivElement>(null);
 
 	useEffect(() => {
+		if (messages.length === 0 && !isStreaming && toolActivity.length === 0) {
+			return;
+		}
 		messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
 	}, [messages.length, isStreaming, toolActivity.length]);
 

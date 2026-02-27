@@ -8,7 +8,6 @@ import {
 import {
 	Button,
 	SettingSidebarButton,
-	Input,
 	TextArea,
 	Toggle,
 	NumberStepper,
@@ -266,7 +265,7 @@ export function AgentConfig({ agentId }: AgentConfigProps) {
 		);
 	}
 
-	const active = SECTIONS.find((s) => s.id === activeSection)!;
+	const active = SECTIONS.find((s) => s.id === activeSection) ?? SECTIONS[0];
 	const isIdentitySection = active.group === "identity";
 
 	return (
@@ -346,18 +345,20 @@ export function AgentConfig({ agentId }: AgentConfigProps) {
 						}}
 					/>
 				) : (
-					<ConfigSectionEditor
-						sectionId={active.id}
-						label={active.label}
-						description={active.description}
-						detail={active.detail}
-						config={configQuery.data!}
-						onDirtyChange={setDirty}
-						saveHandlerRef={saveHandlerRef}
-						onSave={(update) =>
-							configMutation.mutate({ agent_id: agentId, ...update })
-						}
-					/>
+					configQuery.data && (
+						<ConfigSectionEditor
+							sectionId={active.id}
+							label={active.label}
+							description={active.description}
+							detail={active.detail}
+							config={configQuery.data}
+							onDirtyChange={setDirty}
+							saveHandlerRef={saveHandlerRef}
+							onSave={(update) =>
+								configMutation.mutate({ agent_id: agentId, ...update })
+							}
+						/>
+					)
 				)}
 			</div>
 
@@ -455,13 +456,14 @@ function IdentityEditor({
 
 	// Register save/revert handlers
 	useEffect(() => {
-		saveHandlerRef.current.save = handleSave;
-		saveHandlerRef.current.revert = handleRevert;
+		const handlers = saveHandlerRef.current;
+		handlers.save = handleSave;
+		handlers.revert = handleRevert;
 		return () => {
-			saveHandlerRef.current.save = undefined;
-			saveHandlerRef.current.revert = undefined;
+			handlers.save = undefined;
+			handlers.revert = undefined;
 		};
-	}, [handleSave, handleRevert]);
+	}, [handleSave, handleRevert, saveHandlerRef]);
 
 	return (
 		<>
@@ -657,13 +659,14 @@ function ConfigSectionEditor({
 
 	// Register save/revert handlers
 	useEffect(() => {
-		saveHandlerRef.current.save = handleSave;
-		saveHandlerRef.current.revert = handleRevert;
+		const handlers = saveHandlerRef.current;
+		handlers.save = handleSave;
+		handlers.revert = handleRevert;
 		return () => {
-			saveHandlerRef.current.save = undefined;
-			saveHandlerRef.current.revert = undefined;
+			handlers.save = undefined;
+			handlers.revert = undefined;
 		};
-	}, [handleSave, handleRevert]);
+	}, [handleSave, handleRevert, saveHandlerRef]);
 
 	const renderFields = () => {
 		switch (sectionId) {
@@ -1025,33 +1028,6 @@ function ConfigSectionEditor({
 }
 
 // -- Form Field Components --
-
-interface ConfigFieldProps {
-	label: string;
-	description: string;
-	value: string;
-	onChange: (value: string) => void;
-}
-
-function ConfigField({
-	label,
-	description,
-	value,
-	onChange,
-}: ConfigFieldProps) {
-	return (
-		<div className="flex flex-col gap-1.5">
-			<label className="text-sm font-medium text-ink">{label}</label>
-			<p className="text-tiny text-ink-faint">{description}</p>
-			<Input
-				type="text"
-				value={value}
-				onChange={(e) => onChange(e.target.value)}
-				className="mt-1 border-app-line/50 bg-app-darkBox/30"
-			/>
-		</div>
-	);
-}
 
 interface ConfigToggleFieldProps {
 	label: string;

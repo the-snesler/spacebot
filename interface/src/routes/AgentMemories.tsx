@@ -23,7 +23,6 @@ import {
 } from "@/ui";
 import { formatTimeAgo } from "@/lib/format";
 import {
-	Search01Icon,
 	ArrowDown01Icon,
 	LeftToRightListBulletIcon,
 	WorkflowSquare01Icon,
@@ -155,6 +154,9 @@ export function AgentMemories({ agentId }: AgentMemoriesProps) {
 
 	// Reset expanded when data changes
 	useEffect(() => {
+		void debouncedQuery;
+		void sort;
+		void typeFilter;
 		setExpandedId(null);
 	}, [debouncedQuery, sort, typeFilter]);
 

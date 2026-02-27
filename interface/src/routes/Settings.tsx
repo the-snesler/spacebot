@@ -1,3 +1,7 @@
+function getErrorMessage(error: unknown): string {
+	if (error instanceof Error) return error.message;
+	return String(error);
+}
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, type GlobalSettingsResponse } from "@/api/client";
@@ -395,8 +399,11 @@ export function Settings() {
 				setTestedSignature(null);
 				return false;
 			}
-		} catch (error: any) {
-			setTestResult({ success: false, message: `Failed: ${error.message}` });
+		} catch (error: unknown) {
+			setTestResult({
+				success: false,
+				message: `Failed: ${getErrorMessage(error)}`,
+			});
 			setTestedSignature(null);
 			return false;
 		}
@@ -417,7 +424,7 @@ export function Settings() {
 		});
 	};
 
-	const monitorOpenAiBrowserOAuth = async (
+	const monitorOpenAiBrowserOAuth = useCallback(async (
 		stateToken: string,
 		signal: AbortSignal,
 	) => {
@@ -468,20 +475,20 @@ export function Settings() {
 				text: "Sign-in timed out. Please try again.",
 				type: "error",
 			});
-		} catch (error: any) {
+		} catch (error: unknown) {
 			if (signal.aborted) return;
 			setDeviceCodeInfo(null);
 			setDeviceCodeCopied(false);
 			setOpenAiBrowserOAuthMessage({
-				text: `Failed to verify sign-in: ${error.message}`,
+				text: `Failed to verify sign-in: ${getErrorMessage(error)}`,
 				type: "error",
 			});
 		} finally {
 			setIsPollingOpenAiBrowserOAuth(false);
 		}
-	};
+	}, [queryClient]);
 
-	const handleStartChatGptOAuth = async () => {
+	const handleStartChatGptOAuth = useCallback(async () => {
 		setOpenAiBrowserOAuthMessage(null);
 		setDeviceCodeInfo(null);
 		setDeviceCodeCopied(false);
@@ -511,13 +518,13 @@ export function Settings() {
 				verificationUrl: result.verification_url,
 			});
 			void monitorOpenAiBrowserOAuth(result.state, abort.signal);
-		} catch (error: any) {
+		} catch (error: unknown) {
 			setOpenAiBrowserOAuthMessage({
-				text: `Failed: ${error.message}`,
+				text: `Failed: ${getErrorMessage(error)}`,
 				type: "error",
 			});
 		}
-	};
+	}, [monitorOpenAiBrowserOAuth, startOpenAiBrowserOAuthMutation]);
 
 	useEffect(() => {
 		if (!openAiOAuthDialogOpen) {
@@ -534,7 +541,7 @@ export function Settings() {
 		if (oauthAutoStartRef.current) return;
 		oauthAutoStartRef.current = true;
 		void handleStartChatGptOAuth();
-	}, [openAiOAuthDialogOpen]);
+	}, [openAiOAuthDialogOpen, handleStartChatGptOAuth]);
 
 	const handleCopyDeviceCode = async () => {
 		if (!deviceCodeInfo) return;
@@ -553,9 +560,9 @@ export function Settings() {
 				document.body.removeChild(textarea);
 			}
 			setDeviceCodeCopied(true);
-		} catch (error: any) {
+		} catch (error: unknown) {
 			setOpenAiBrowserOAuthMessage({
-				text: `Failed to copy code: ${error.message}`,
+				text: `Failed to copy code: ${getErrorMessage(error)}`,
 				type: "error",
 			});
 		}
@@ -1168,7 +1175,7 @@ function ServerSection({ settings, isLoading }: GlobalSettingsSectionProps) {
 
 	const handleSave = () => {
 		const port = parseInt(apiPort, 10);
-		if (isNaN(port) || port < 1024 || port > 65535) {
+		if (Number.isNaN(port) || port < 1024 || port > 65535) {
 			setMessage({
 				text: "Port must be between 1024 and 65535",
 				type: "error",
@@ -1476,17 +1483,17 @@ function OpenCodeSection({ settings, isLoading }: GlobalSettingsSectionProps) {
 
 	const handleSave = () => {
 		const servers = parseInt(maxServers, 10);
-		if (isNaN(servers) || servers < 1) {
+		if (Number.isNaN(servers) || servers < 1) {
 			setMessage({ text: "Max servers must be at least 1", type: "error" });
 			return;
 		}
 		const timeout = parseInt(startupTimeout, 10);
-		if (isNaN(timeout) || timeout < 1) {
+		if (Number.isNaN(timeout) || timeout < 1) {
 			setMessage({ text: "Startup timeout must be at least 1", type: "error" });
 			return;
 		}
 		const retries = parseInt(maxRetries, 10);
-		if (isNaN(retries) || retries < 0) {
+		if (Number.isNaN(retries) || retries < 0) {
 			setMessage({ text: "Max retries cannot be negative", type: "error" });
 			return;
 		}
@@ -1773,8 +1780,8 @@ function ConfigFileSection() {
 					try {
 						parseToml(newContent);
 						setValidationError(null);
-					} catch (error: any) {
-						setValidationError(error.message || "Invalid TOML");
+					} catch (error: unknown) {
+						setValidationError(getErrorMessage(error) || "Invalid TOML");
 					}
 				}
 			});
@@ -1831,7 +1838,7 @@ function ConfigFileSection() {
 			viewRef.current?.destroy();
 			viewRef.current = null;
 		};
-	}, [data?.content]);
+	}, [data?.content, editorLoaded]);
 
 	// Handle Cmd+S from CodeMirror
 	useEffect(() => {
@@ -1846,7 +1853,7 @@ function ConfigFileSection() {
 
 		element.addEventListener("cm-save", handler);
 		return () => element.removeEventListener("cm-save", handler);
-	}, [isDirty, validationError, currentContent]);
+	}, [isDirty, validationError, currentContent, updateMutation.mutate]);
 
 	const handleSave = () => {
 		if (!isDirty || validationError) return;

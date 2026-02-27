@@ -5,7 +5,7 @@ import {
 	type VariantProps,
 } from "class-variance-authority";
 
-export { VariantProps };
+export type { VariantProps };
 export const cva = cvaOriginal;
 export const cx = cxOriginal;
 
@@ -19,23 +19,20 @@ type TailwindFactory = {
 		React.PropsWithoutRef<React.JSX.IntrinsicElements[K]> &
 			React.RefAttributes<HTMLElement>
 	>;
-} & {
-	<T extends React.ComponentType<any>>(
-		component: T,
-	): (
+} & (<T extends React.ComponentType<unknown>>(
+		component: T,) => (
 		strings: TemplateStringsArray,
 		...values: (string | number | undefined | null | false)[]
 	) => React.ForwardRefExoticComponent<
 		React.PropsWithoutRef<React.ComponentPropsWithoutRef<T>> &
-			React.RefAttributes<any>
-	>;
-};
+			React.RefAttributes<unknown>
+	>);
 
-function twFactory<T extends ElementType | React.ComponentType<any>>(type: T) {
+function twFactory<T extends ElementType | React.ComponentType<unknown>>(type: T) {
 	return (
 		strings: TemplateStringsArray,
 		...values: (string | number | undefined | null | false)[]
-	): React.ForwardRefExoticComponent<any> => {
+	): React.ForwardRefExoticComponent<unknown> => {
 		const baseClasses = strings.reduce((acc, str, i) => {
 			const value = values[i];
 			if (value === undefined || value === null || value === false) {
@@ -44,7 +41,7 @@ function twFactory<T extends ElementType | React.ComponentType<any>>(type: T) {
 			return acc + str + String(value);
 		}, "");
 
-		return React.forwardRef((props: any, ref) => {
+		return React.forwardRef<unknown, { className?: string } & Record<string, unknown>>((props, ref) => {
 			const { className, ...rest } = props;
 			const finalClassName = cx(baseClasses, className);
 
@@ -61,7 +58,7 @@ function twFactory<T extends ElementType | React.ComponentType<any>>(type: T) {
 				className: finalClassName,
 				...rest,
 			});
-		}) as any;
+		}) as unknown as React.ForwardRefExoticComponent<unknown>;
 	};
 }
 
@@ -69,7 +66,7 @@ export const tw = new Proxy((() => {}) as unknown as TailwindFactory, {
 	get(_, property: string) {
 		return twFactory(property as ElementType);
 	},
-	apply(_, __, [element]: [React.ComponentType<any>]) {
+	apply(_, __, [element]: [React.ComponentType<unknown>]) {
 		return twFactory(element);
 	},
 });

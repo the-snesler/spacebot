@@ -57,6 +57,13 @@ function emptyLiveState(): ChannelLiveState {
 	};
 }
 
+function getOrCreateLiveState(
+	prev: Record<string, ChannelLiveState>,
+	channelId: string,
+) {
+	return prev[channelId] ?? emptyLiveState();
+}
+
 /** Get a sortable timestamp from any timeline item. */
 function itemTimestamp(item: TimelineItem): string {
 	switch (item.type) {
@@ -181,16 +188,10 @@ export function useChannelLiveState(channels: ChannelInfo[]) {
 		}
 	}, [syncStatusSnapshot]);
 
-	// Helper: get or create channel state
-	const getOrCreate = (
-		prev: Record<string, ChannelLiveState>,
-		channelId: string,
-	) => prev[channelId] ?? emptyLiveState();
-
 	// Helper: push a timeline item into a channel's state
 	const pushItem = useCallback((channelId: string, item: TimelineItem) => {
 		setLiveStates((prev) => {
-			const existing = getOrCreate(prev, channelId);
+			const existing = getOrCreateLiveState(prev, channelId);
 			const timeline = [...existing.timeline, item];
 			return { ...prev, [channelId]: { ...existing, timeline } };
 		});
@@ -246,7 +247,7 @@ export function useChannelLiveState(channels: ChannelInfo[]) {
 				created_at: new Date().toISOString(),
 			});
 			setLiveStates((prev) => {
-				const existing = getOrCreate(prev, event.channel_id);
+				const existing = getOrCreateLiveState(prev, event.channel_id);
 				return {
 					...prev,
 					[event.channel_id]: { ...existing, isTyping: false },
@@ -259,7 +260,7 @@ export function useChannelLiveState(channels: ChannelInfo[]) {
 	const handleTypingState = useCallback((data: unknown) => {
 		const event = data as TypingStateEvent;
 		setLiveStates((prev) => {
-			const existing = getOrCreate(prev, event.channel_id);
+			const existing = getOrCreateLiveState(prev, event.channel_id);
 			return {
 				...prev,
 				[event.channel_id]: { ...existing, isTyping: event.is_typing },
@@ -275,7 +276,7 @@ export function useChannelLiveState(channels: ChannelInfo[]) {
 
 			// Add to active workers (for activity bar)
 			setLiveStates((prev) => {
-				const existing = getOrCreate(prev, channelId);
+				const existing = getOrCreateLiveState(prev, channelId);
 				return {
 					...prev,
 					[channelId]: {
@@ -313,14 +314,15 @@ export function useChannelLiveState(channels: ChannelInfo[]) {
 		(data: unknown) => {
 			const event = data as WorkerStatusEvent;
 			if (event.channel_id) {
+				const channelId = event.channel_id;
 				// Direct lookup via channel_id
 				setLiveStates((prev) => {
-					const state = prev[event.channel_id!];
+					const state = prev[channelId];
 					const worker = state?.workers[event.worker_id];
 					if (!worker) return prev;
 					return {
 						...prev,
-						[event.channel_id!]: {
+						[channelId]: {
 							...state,
 							workers: {
 								...state.workers,
@@ -330,7 +332,7 @@ export function useChannelLiveState(channels: ChannelInfo[]) {
 					};
 				});
 				// Update timeline item status
-				updateItem(event.channel_id, event.worker_id, (item) => {
+				updateItem(channelId, event.worker_id, (item) => {
 					if (item.type !== "worker_run") return item;
 					return { ...item, status: event.status };
 				});
@@ -363,17 +365,18 @@ export function useChannelLiveState(channels: ChannelInfo[]) {
 		(data: unknown) => {
 			const event = data as WorkerCompletedEvent;
 			if (event.channel_id) {
+				const channelId = event.channel_id;
 				setLiveStates((prev) => {
-					const state = prev[event.channel_id!];
+					const state = prev[channelId];
 					if (!state?.workers[event.worker_id]) return prev;
 					const { [event.worker_id]: _, ...remainingWorkers } = state.workers;
 					return {
 						...prev,
-						[event.channel_id!]: { ...state, workers: remainingWorkers },
+						[channelId]: { ...state, workers: remainingWorkers },
 					};
 				});
 				// Update timeline item with result
-				updateItem(event.channel_id, event.worker_id, (item) => {
+				updateItem(channelId, event.worker_id, (item) => {
 					if (item.type !== "worker_run") return item;
 					return {
 						...item,
@@ -407,7 +410,7 @@ export function useChannelLiveState(channels: ChannelInfo[]) {
 
 			// Add to active branches (for activity bar)
 			setLiveStates((prev) => {
-				const existing = getOrCreate(prev, event.channel_id);
+				const existing = getOrCreateLiveState(prev, event.channel_id);
 				return {
 					...prev,
 					[event.channel_id]: {

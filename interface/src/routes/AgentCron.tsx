@@ -6,7 +6,6 @@ import {
 	type CreateCronRequest,
 } from "@/api/client";
 import { formatDuration, formatTimeAgo } from "@/lib/format";
-import { AnimatePresence, motion } from "framer-motion";
 import { Clock05Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
@@ -278,7 +277,7 @@ export function AgentCron({ agentId }: AgentCronProps) {
 
 				{totalJobs > 0 && (
 					<div className="flex flex-col gap-3">
-						{data!.jobs.map((job) => (
+						{data?.jobs.map((job) => (
 							<CronJobCard
 								key={job.id}
 								job={job}
@@ -389,7 +388,7 @@ export function AgentCron({ agentId }: AgentCronProps) {
 						<Field label="Active Hours (optional)">
 							<div className="flex items-center gap-2">
 								<NumberStepper
-									value={parseInt(formData.active_start_hour) || 0}
+									value={parseInt(formData.active_start_hour, 10) || 0}
 									onChange={(v) =>
 										setFormData((d) => ({
 											...d,
@@ -403,7 +402,7 @@ export function AgentCron({ agentId }: AgentCronProps) {
 								/>
 								<span className="text-sm text-ink-faint">to</span>
 								<NumberStepper
-									value={parseInt(formData.active_end_hour) || 23}
+									value={parseInt(formData.active_end_hour, 10) || 23}
 									onChange={(v) =>
 										setFormData((d) => ({
 											...d,
@@ -586,7 +585,7 @@ function CronJobCard({
 
 					<p className="mb-2 text-sm text-ink-dull" title={job.prompt}>
 						{job.prompt.length > 120
-							? job.prompt.slice(0, 120) + "..."
+							? `${job.prompt.slice(0, 120)}...`
 							: job.prompt}
 					</p>
 

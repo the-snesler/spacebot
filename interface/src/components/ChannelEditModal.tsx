@@ -1,6 +1,13 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, type PlatformStatus, type BindingInfo } from "@/api/client";
+import {
+	api,
+	type PlatformStatus,
+	type BindingInfo,
+	type CreateBindingRequest,
+	type UpdateBindingRequest,
+	type DeleteBindingRequest,
+} from "@/api/client";
 import {
 	Button,
 	Input,
@@ -173,7 +180,10 @@ export function ChannelEditModal({
 	}
 
 	function handleSaveCredentials() {
-		const request: any = { agent_id: "main", channel: platform };
+		const request: CreateBindingRequest = {
+			agent_id: "main",
+			channel: platform,
+		};
 		if (platform === "discord") {
 			if (!credentialInputs.discord_token?.trim()) return;
 			request.platform_credentials = {
@@ -212,7 +222,10 @@ export function ChannelEditModal({
 	}
 
 	function handleAddBinding() {
-		const request: any = { agent_id: bindingForm.agent_id, channel: platform };
+		const request: CreateBindingRequest = {
+			agent_id: bindingForm.agent_id,
+			channel: platform,
+		};
 		if (platform === "discord" && bindingForm.guild_id.trim())
 			request.guild_id = bindingForm.guild_id.trim();
 		if (platform === "slack" && bindingForm.workspace_id.trim())
@@ -230,7 +243,7 @@ export function ChannelEditModal({
 
 	function handleUpdateBinding() {
 		if (!editingBinding) return;
-		const request: any = {
+		const request: UpdateBindingRequest = {
 			original_agent_id: editingBinding.agent_id,
 			original_channel: editingBinding.channel,
 			original_guild_id: editingBinding.guild_id || undefined,
@@ -253,7 +266,7 @@ export function ChannelEditModal({
 	}
 
 	function handleDeleteBinding(binding: BindingInfo) {
-		const request: any = {
+		const request: DeleteBindingRequest = {
 			agent_id: binding.agent_id,
 			channel: binding.channel,
 		};
@@ -569,9 +582,9 @@ export function ChannelEditModal({
 						{/* Binding list */}
 						{!isEditingOrAdding && platformBindings.length > 0 && (
 							<div className="rounded-md border border-app-line">
-								{platformBindings.map((binding, idx) => (
+								{platformBindings.map((binding) => (
 									<div
-										key={idx}
+										key={`${binding.agent_id}:${binding.channel}:${binding.guild_id ?? ""}:${binding.workspace_id ?? ""}:${binding.chat_id ?? ""}`}
 										className="flex items-center gap-2 border-b border-app-line/50 px-3 py-2 last:border-b-0"
 									>
 										<div className="flex-1 min-w-0">

@@ -1,4 +1,4 @@
-import * as React from "react";
+import type * as React from "react";
 import { cx } from "./utils";
 
 export interface ToggleGroupOption<T extends string> {
@@ -27,7 +27,7 @@ export function ToggleGroup<T extends string>({
 				className,
 			)}
 		>
-			{options.map((option, i) => {
+			{options.map((option) => {
 				const isActive = option.value === value;
 
 				return (

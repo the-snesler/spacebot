@@ -32,8 +32,8 @@ export function AgentChannels({ agentId, liveStates }: AgentChannelsProps) {
 		return agentChannels.filter(
 			(c) =>
 				c.id.toLowerCase().includes(query) ||
-				(c.display_name && c.display_name.toLowerCase().includes(query)) ||
-				(c.platform && c.platform.toLowerCase().includes(query)),
+				(c.display_name?.toLowerCase().includes(query) ?? false) ||
+				(c.platform?.toLowerCase().includes(query) ?? false),
 		);
 	}, [channelsData, agentId, searchQuery]);
 
