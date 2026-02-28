@@ -45,6 +45,11 @@ pub enum ActionContent {
 /// Convert a Rig message history to transcript steps, serialize as JSON, and gzip compress.
 pub fn serialize_transcript(history: &[rig::message::Message]) -> Vec<u8> {
     let steps = convert_history(history);
+    serialize_steps(&steps)
+}
+
+/// Serialize transcript steps as gzipped JSON.
+pub fn serialize_steps(steps: &[TranscriptStep]) -> Vec<u8> {
     let json = serde_json::to_vec(&steps).unwrap_or_default();
 
     let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
@@ -146,4 +151,39 @@ fn convert_history(history: &[rig::message::Message]) -> Vec<TranscriptStep> {
     }
 
     steps
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ActionContent, TranscriptStep, deserialize_transcript, serialize_steps};
+
+    #[test]
+    fn serialize_steps_round_trip() {
+        let steps = vec![
+            TranscriptStep::Action {
+                content: vec![ActionContent::Text {
+                    text: "hello from acp".to_string(),
+                }],
+            },
+            TranscriptStep::ToolResult {
+                call_id: "call-1".to_string(),
+                name: "".to_string(),
+                text: "ok".to_string(),
+            },
+        ];
+
+        let blob = serialize_steps(&steps);
+        let decoded = deserialize_transcript(&blob).expect("transcript should deserialize");
+        assert_eq!(decoded.len(), 2);
+
+        match &decoded[0] {
+            TranscriptStep::Action { content } => {
+                assert!(matches!(
+                    content.first(),
+                    Some(ActionContent::Text { text }) if text == "hello from acp"
+                ));
+            }
+            _ => panic!("expected action step"),
+        }
+    }
 }

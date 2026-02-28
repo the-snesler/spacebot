@@ -147,8 +147,14 @@ fn build_channel_system_prompt(rc: &spacebot::config::RuntimeConfig) -> String {
     let browser_enabled = rc.browser_config.load().enabled;
     let web_search_enabled = rc.brave_search_key.load().is_some();
     let opencode_enabled = rc.opencode.load().enabled;
+    let acp_agents = rc.enabled_acp_agent_ids();
     let worker_capabilities = prompt_engine
-        .render_worker_capabilities(browser_enabled, web_search_enabled, opencode_enabled)
+        .render_worker_capabilities(
+            browser_enabled,
+            web_search_enabled,
+            opencode_enabled,
+            &acp_agents,
+        )
         .expect("failed to render worker capabilities");
 
     let conversation_context = prompt_engine
@@ -199,6 +205,7 @@ async fn dump_channel_context() {
         worker_handles: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
         active_workers: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
         worker_inputs: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
+        worker_cancellations: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
         status_block,
         deps: deps.clone(),
         conversation_logger,
@@ -418,6 +425,7 @@ async fn dump_all_contexts() {
         worker_handles: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
         active_workers: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
         worker_inputs: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
+        worker_cancellations: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
         status_block: Arc::new(tokio::sync::RwLock::new(
             spacebot::agent::status::StatusBlock::new(),
         )),

@@ -9,6 +9,7 @@
 use crate::acp::client::SpacebotAcpClient;
 use crate::acp::process::AcpProcess;
 use crate::config::AcpAgentConfig;
+use crate::conversation::worker_transcript::{self, ActionContent, TranscriptStep};
 use crate::sandbox::Sandbox;
 use crate::{AgentId, ChannelId, ProcessEvent, WorkerId};
 
@@ -54,6 +55,8 @@ pub struct AcpWorker {
 pub struct AcpWorkerResult {
     pub session_id: String,
     pub result_text: String,
+    pub transcript_blob: Vec<u8>,
+    pub tool_calls: i64,
 }
 
 impl AcpWorker {
@@ -404,6 +407,16 @@ impl AcpWorker {
                             // session_notification handler via the shared
                             // Arc<Mutex<String>>.
                             let result_text = result_text.lock().map(|s| s.clone()).unwrap_or_default();
+                            let transcript_steps = if result_text.trim().is_empty() {
+                                Vec::new()
+                            } else {
+                                vec![TranscriptStep::Action {
+                                    content: vec![ActionContent::Text {
+                                        text: result_text.clone(),
+                                    }],
+                                }]
+                            };
+                            let transcript_blob = worker_transcript::serialize_steps(&transcript_steps);
 
                             // Clean up
                             io_handle.abort();
@@ -411,6 +424,8 @@ impl AcpWorker {
                             Ok(AcpWorkerResult {
                                 session_id: session_id.to_string(),
                                 result_text,
+                                transcript_blob,
+                                tool_calls: 0,
                             })
                         })
                         .await
@@ -419,9 +434,9 @@ impl AcpWorker {
             })
             .context("failed to spawn ACP session thread")?;
 
-        result_rx
-            .await
-            .map_err(|_| anyhow::anyhow!("ACP session thread terminated before returning a result"))?
+        result_rx.await.map_err(|_| {
+            anyhow::anyhow!("ACP session thread terminated before returning a result")
+        })?
     }
 
     /// Send a status update via the process event bus.

@@ -341,6 +341,25 @@ impl ProcessRunLogger {
         });
     }
 
+    /// Record a worker transcript blob and tool call count. Fire-and-forget.
+    pub fn log_worker_transcript(&self, worker_id: WorkerId, transcript: Vec<u8>, tool_calls: i64) {
+        let pool = self.pool.clone();
+        let id = worker_id.to_string();
+
+        tokio::spawn(async move {
+            if let Err(error) =
+                sqlx::query("UPDATE worker_runs SET transcript = ?, tool_calls = ? WHERE id = ?")
+                    .bind(&transcript)
+                    .bind(tool_calls)
+                    .bind(&id)
+                    .execute(&pool)
+                    .await
+            {
+                tracing::warn!(%error, worker_id = %id, "failed to persist worker transcript");
+            }
+        });
+    }
+
     /// Load a unified timeline for a channel: messages, branch runs, and worker runs
     /// interleaved chronologically (oldest first).
     ///

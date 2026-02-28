@@ -1600,9 +1600,7 @@ impl Channel {
                 run_logger.log_worker_status(*worker_id, status);
             }
             ProcessEvent::WorkerResult {
-                worker_id,
-                result,
-                ..
+                worker_id, result, ..
             } => {
                 run_logger.log_worker_status(*worker_id, "intermediate result received");
                 self.pending_results.push(PendingResult {
@@ -2416,6 +2414,7 @@ pub async fn spawn_acp_worker_from_state(
     };
 
     let worker_id = worker.id;
+    let run_logger = state.process_run_logger.clone();
 
     // Store cancellation token for graceful shutdown
     state
@@ -2437,8 +2436,22 @@ pub async fn spawn_acp_worker_from_state(
         state.deps.agent_id.clone(),
         Some(state.channel_id.clone()),
         async move {
-            let result = worker.run().await?;
-            Ok::<String, anyhow::Error>(result.result_text)
+            match worker.run().await {
+                Ok(result) => {
+                    run_logger.log_worker_transcript(
+                        worker_id,
+                        result.transcript_blob,
+                        result.tool_calls,
+                    );
+                    Ok::<String, anyhow::Error>(result.result_text)
+                }
+                Err(error) => {
+                    let empty_transcript =
+                        crate::conversation::worker_transcript::serialize_steps(&[]);
+                    run_logger.log_worker_transcript(worker_id, empty_transcript, 0);
+                    Err(error)
+                }
+            }
         }
         .instrument(worker_span),
     );

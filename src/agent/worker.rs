@@ -513,8 +513,6 @@ impl Worker {
         full_history.extend(history.iter().cloned());
         let transcript_blob =
             crate::conversation::worker_transcript::serialize_transcript(&full_history);
-        let pool = self.deps.sqlite_pool.clone();
-        let worker_id = self.id.to_string();
 
         // Count tool calls from the Rig history (each ToolCall in an Assistant message)
         let tool_calls: i64 = full_history
@@ -530,18 +528,9 @@ impl Worker {
             })
             .sum();
 
-        tokio::spawn(async move {
-            if let Err(error) =
-                sqlx::query("UPDATE worker_runs SET transcript = ?, tool_calls = ? WHERE id = ?")
-                    .bind(&transcript_blob)
-                    .bind(tool_calls)
-                    .bind(&worker_id)
-                    .execute(&pool)
-                    .await
-            {
-                tracing::warn!(%error, worker_id, "failed to persist worker transcript");
-            }
-        });
+        let run_logger =
+            crate::conversation::history::ProcessRunLogger::new(self.deps.sqlite_pool.clone());
+        run_logger.log_worker_transcript(self.id, transcript_blob, tool_calls);
     }
 
     /// Check if worker is in a terminal state.

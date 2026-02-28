@@ -111,9 +111,7 @@ impl StatusBlock {
                 }
             }
             ProcessEvent::WorkerResult {
-                worker_id,
-                result,
-                ..
+                worker_id, result, ..
             } => {
                 if let Some(worker) = self.active_workers.iter_mut().find(|w| w.id == *worker_id) {
                     let first_line = result.lines().next().unwrap_or_default().trim();
