@@ -14,6 +14,16 @@ pub(super) struct GlobalSettingsResponse {
     api_bind: String,
     worker_log_mode: String,
     opencode: OpenCodeSettingsResponse,
+    acp: std::collections::HashMap<String, AcpProfileResponse>,
+}
+
+#[derive(Serialize)]
+pub(super) struct AcpProfileResponse {
+    enabled: bool,
+    command: String,
+    args: Vec<String>,
+    env: std::collections::HashMap<String, String>,
+    timeout: u64,
 }
 
 #[derive(Serialize)]
@@ -41,6 +51,16 @@ pub(super) struct GlobalSettingsUpdate {
     api_bind: Option<String>,
     worker_log_mode: Option<String>,
     opencode: Option<OpenCodeSettingsUpdate>,
+    acp: Option<std::collections::HashMap<String, Option<AcpProfileUpdate>>>,
+}
+
+#[derive(Deserialize)]
+pub(super) struct AcpProfileUpdate {
+    enabled: Option<bool>,
+    command: Option<String>,
+    args: Option<Vec<String>>,
+    env: Option<std::collections::HashMap<String, String>>,
+    timeout: Option<u64>,
 }
 
 #[derive(Deserialize)]
@@ -88,7 +108,7 @@ pub(super) async fn get_global_settings(
 ) -> Result<Json<GlobalSettingsResponse>, StatusCode> {
     let config_path = state.config_path.read().await.clone();
 
-    let (brave_search_key, api_enabled, api_port, api_bind, worker_log_mode, opencode) =
+    let (brave_search_key, api_enabled, api_port, api_bind, worker_log_mode, opencode, acp) =
         if config_path.exists() {
             let content = tokio::fs::read_to_string(&config_path)
                 .await
@@ -182,6 +202,61 @@ pub(super) async fn get_global_settings(
                 },
             };
 
+            let mut acp = std::collections::HashMap::new();
+            if let Some(acp_table) = doc
+                .get("defaults")
+                .and_then(|d| d.get("acp"))
+                .and_then(|a| a.as_table())
+            {
+                for (profile_name, profile_item) in acp_table {
+                    if let Some(profile) = profile_item.as_table() {
+                        let args: Vec<String> = profile
+                            .get("args")
+                            .and_then(|v| v.as_array())
+                            .map(|arr| {
+                                arr.iter()
+                                    .filter_map(|v| v.as_str().map(String::from))
+                                    .collect()
+                            })
+                            .unwrap_or_default();
+
+                        let env: std::collections::HashMap<String, String> = profile
+                            .get("env")
+                            .and_then(|v| v.as_table())
+                            .map(|t| {
+                                t.iter()
+                                    .filter_map(|(k, v)| {
+                                        v.as_str().map(|s| (k.to_string(), s.to_string()))
+                                    })
+                                    .collect()
+                            })
+                            .unwrap_or_default();
+
+                        acp.insert(
+                            profile_name.to_string(),
+                            AcpProfileResponse {
+                                enabled: profile
+                                    .get("enabled")
+                                    .and_then(|v| v.as_bool())
+                                    .unwrap_or(false),
+                                command: profile
+                                    .get("command")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("")
+                                    .to_string(),
+                                args,
+                                env,
+                                timeout: profile
+                                    .get("timeout")
+                                    .and_then(|v| v.as_integer())
+                                    .and_then(|i| u64::try_from(i).ok())
+                                    .unwrap_or(300),
+                            },
+                        );
+                    }
+                }
+            }
+
             (
                 brave_search,
                 api_enabled,
@@ -189,6 +264,7 @@ pub(super) async fn get_global_settings(
                 api_bind,
                 worker_log_mode,
                 opencode,
+                acp,
             )
         } else {
             (
@@ -209,6 +285,7 @@ pub(super) async fn get_global_settings(
                         webfetch: "allow".to_string(),
                     },
                 },
+                std::collections::HashMap::new(),
             )
         };
 
@@ -219,6 +296,7 @@ pub(super) async fn get_global_settings(
         api_bind,
         worker_log_mode,
         opencode,
+        acp,
     }))
 }
 
@@ -325,6 +403,59 @@ pub(super) async fn update_global_settings(
             }
             if let Some(webfetch) = permissions.webfetch {
                 doc["defaults"]["opencode"]["permissions"]["webfetch"] = toml_edit::value(webfetch);
+            }
+        }
+    }
+
+    if let Some(acp_profiles) = request.acp {
+        if doc.get("defaults").is_none() {
+            doc["defaults"] = toml_edit::Item::Table(toml_edit::Table::new());
+        }
+        if doc["defaults"].get("acp").is_none() {
+            doc["defaults"]["acp"] = toml_edit::Item::Table(toml_edit::Table::new());
+        }
+
+        for (profile_name, profile_update) in acp_profiles {
+            match profile_update {
+                None => {
+                    // null value = delete the profile
+                    if let Some(acp_table) = doc["defaults"]["acp"].as_table_mut() {
+                        acp_table.remove(&profile_name);
+                    }
+                }
+                Some(update) => {
+                    if doc["defaults"]["acp"].get(&profile_name).is_none() {
+                        doc["defaults"]["acp"][&profile_name] =
+                            toml_edit::Item::Table(toml_edit::Table::new());
+                    }
+
+                    if let Some(enabled) = update.enabled {
+                        doc["defaults"]["acp"][&profile_name]["enabled"] =
+                            toml_edit::value(enabled);
+                    }
+                    if let Some(command) = update.command {
+                        doc["defaults"]["acp"][&profile_name]["command"] =
+                            toml_edit::value(command);
+                    }
+                    if let Some(args) = update.args {
+                        let mut arr = toml_edit::Array::new();
+                        for arg in &args {
+                            arr.push(arg.as_str());
+                        }
+                        doc["defaults"]["acp"][&profile_name]["args"] = toml_edit::value(arr);
+                    }
+                    if let Some(env) = update.env {
+                        let mut env_table = toml_edit::InlineTable::new();
+                        for (k, v) in &env {
+                            env_table.insert(k, v.as_str().into());
+                        }
+                        doc["defaults"]["acp"][&profile_name]["env"] = toml_edit::value(env_table);
+                    }
+                    if let Some(timeout) = update.timeout {
+                        doc["defaults"]["acp"][&profile_name]["timeout"] =
+                            toml_edit::value(timeout as i64);
+                    }
+                }
             }
         }
     }

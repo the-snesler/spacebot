@@ -198,11 +198,15 @@ impl PromptEngine {
     }
 
     /// Convenience method for rendering worker capabilities fragment.
+    ///
+    /// `acp_agents` is the list of enabled ACP profile IDs. A non-empty list
+    /// implies ACP is enabled (no separate flag needed).
     pub fn render_worker_capabilities(
         &self,
         browser_enabled: bool,
         web_search_enabled: bool,
         opencode_enabled: bool,
+        acp_agents: &[String],
     ) -> Result<String> {
         self.render(
             "fragments/worker_capabilities",
@@ -210,6 +214,8 @@ impl PromptEngine {
                 browser_enabled => browser_enabled,
                 web_search_enabled => web_search_enabled,
                 opencode_enabled => opencode_enabled,
+                acp_enabled => !acp_agents.is_empty(),
+                acp_agents => acp_agents,
             },
         )
     }

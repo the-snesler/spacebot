@@ -77,6 +77,10 @@ regex = "1.11"
 # Async utilities
 futures = "0.3"
 pin-project = "1"
+tokio-util = { version = "0.7", features = ["compat"] }
+
+# Agent Client Protocol
+agent-client-protocol = "0.9"
 
 # Schema validation
 schemars = "0.8"

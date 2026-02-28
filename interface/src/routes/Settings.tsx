@@ -11,7 +11,7 @@ import { faSearch } from "@fortawesome/free-solid-svg-icons";
 
 import { parse as parseToml } from "smol-toml";
 
-type SectionId = "providers" | "channels" | "api-keys" | "server" | "opencode" | "worker-logs" | "updates" | "config-file";
+type SectionId = "providers" | "channels" | "api-keys" | "server" | "opencode" | "acp" | "worker-logs" | "updates" | "config-file";
 
 const SECTIONS = [
 	{
@@ -43,6 +43,12 @@ const SECTIONS = [
 		label: "OpenCode",
 		group: "system" as const,
 		description: "OpenCode worker integration",
+	},
+	{
+		id: "acp" as const,
+		label: "ACP",
+		group: "system" as const,
+		description: "Agent Client Protocol workers",
 	},
 	{
 		id: "worker-logs" as const,
@@ -289,7 +295,7 @@ export function Settings() {
 		queryKey: ["global-settings"],
 		queryFn: api.globalSettings,
 		staleTime: 5_000,
-		enabled: activeSection === "api-keys" || activeSection === "server" || activeSection === "opencode" || activeSection === "worker-logs",
+		enabled: activeSection === "api-keys" || activeSection === "server" || activeSection === "opencode" || activeSection === "acp" || activeSection === "worker-logs",
 	});
 
 	const updateMutation = useMutation({
@@ -678,6 +684,8 @@ export function Settings() {
 						<ServerSection settings={globalSettings} isLoading={globalSettingsLoading} />
 					) : activeSection === "opencode" ? (
 						<OpenCodeSection settings={globalSettings} isLoading={globalSettingsLoading} />
+					) : activeSection === "acp" ? (
+						<AcpSection settings={globalSettings} isLoading={globalSettingsLoading} />
 					) : activeSection === "worker-logs" ? (
 						<WorkerLogsSection settings={globalSettings} isLoading={globalSettingsLoading} />
 					) : activeSection === "updates" ? (
@@ -1469,6 +1477,236 @@ function OpenCodeSection({ settings, isLoading }: GlobalSettingsSectionProps) {
 					<Button onClick={handleSave} loading={updateMutation.isPending}>
 						Save Changes
 					</Button>
+				</div>
+			)}
+
+			{message && (
+				<div
+					className={`mt-4 rounded-md border px-3 py-2 text-sm ${message.type === "success"
+							? "border-green-500/20 bg-green-500/10 text-green-400"
+							: "border-red-500/20 bg-red-500/10 text-red-400"
+						}`}
+				>
+					{message.text}
+				</div>
+			)}
+		</div>
+	);
+}
+
+function AcpSection({ settings, isLoading }: GlobalSettingsSectionProps) {
+	const queryClient = useQueryClient();
+	const [profiles, setProfiles] = useState<Record<string, { enabled: boolean; command: string; args: string; env: string; timeout: string }>>({});
+	const [newId, setNewId] = useState("");
+	const [message, setMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
+
+	useEffect(() => {
+		if (settings?.acp) {
+			const mapped: typeof profiles = {};
+			for (const [id, profile] of Object.entries(settings.acp)) {
+				mapped[id] = {
+					enabled: profile.enabled,
+					command: profile.command,
+					args: profile.args.join(" "),
+					env: Object.entries(profile.env).map(([k, v]) => `${k}=${v}`).join("\n"),
+					timeout: profile.timeout.toString(),
+				};
+			}
+			setProfiles(mapped);
+		}
+	}, [settings?.acp]);
+
+	const updateMutation = useMutation({
+		mutationFn: api.updateGlobalSettings,
+		onSuccess: (result) => {
+			if (result.success) {
+				setMessage({ text: result.message, type: "success" });
+				queryClient.invalidateQueries({ queryKey: ["global-settings"] });
+			} else {
+				setMessage({ text: result.message, type: "error" });
+			}
+		},
+		onError: (error) => {
+			setMessage({ text: `Failed: ${error.message}`, type: "error" });
+		},
+	});
+
+	const handleSaveProfile = (id: string) => {
+		const profile = profiles[id];
+		if (!profile) return;
+
+		const timeout = parseInt(profile.timeout, 10);
+		if (isNaN(timeout) || timeout < 1) {
+			setMessage({ text: "Timeout must be at least 1 second", type: "error" });
+			return;
+		}
+
+		const args = profile.args.trim() ? profile.args.trim().split(/\s+/) : [];
+		const env: Record<string, string> = {};
+		for (const line of profile.env.split("\n")) {
+			const trimmed = line.trim();
+			if (!trimmed) continue;
+			const eqIdx = trimmed.indexOf("=");
+			if (eqIdx > 0) {
+				env[trimmed.slice(0, eqIdx)] = trimmed.slice(eqIdx + 1);
+			}
+		}
+
+		updateMutation.mutate({
+			acp: {
+				[id]: {
+					enabled: profile.enabled,
+					command: profile.command.trim(),
+					args,
+					env,
+					timeout,
+				},
+			},
+		});
+	};
+
+	const handleAddProfile = () => {
+		const id = newId.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "-");
+		if (!id) {
+			setMessage({ text: "Profile ID is required", type: "error" });
+			return;
+		}
+		if (profiles[id]) {
+			setMessage({ text: `Profile "${id}" already exists`, type: "error" });
+			return;
+		}
+		setProfiles((prev) => ({
+			...prev,
+			[id]: { enabled: false, command: "", args: "", env: "", timeout: "300" },
+		}));
+		setNewId("");
+	};
+
+	const handleDeleteProfile = (id: string) => {
+		updateMutation.mutate({ acp: { [id]: null } });
+		setProfiles((prev) => {
+			const next = { ...prev };
+			delete next[id];
+			return next;
+		});
+	};
+
+	const updateProfile = (id: string, field: string, value: string | boolean) => {
+		setProfiles((prev) => ({
+			...prev,
+			[id]: { ...prev[id], [field]: value },
+		}));
+	};
+
+	return (
+		<div className="mx-auto max-w-2xl px-6 py-6">
+			<div className="mb-6">
+				<h2 className="font-plex text-sm font-semibold text-ink">ACP Workers</h2>
+				<p className="mt-1 text-sm text-ink-dull">
+					Spawn external coding agents (Claude Code, Codex, Gemini CLI, etc.) as worker subprocesses via the Agent Client Protocol.
+				</p>
+			</div>
+
+			{isLoading ? (
+				<div className="flex items-center gap-2 text-ink-dull">
+					<div className="h-2 w-2 animate-pulse rounded-full bg-accent" />
+					Loading settings...
+				</div>
+			) : (
+				<div className="flex flex-col gap-4">
+					{Object.entries(profiles).map(([id, profile]) => (
+						<div key={id} className="rounded-lg border border-app-line bg-app-box p-4">
+							<div className="mb-3 flex items-center justify-between">
+								<div className="flex items-center gap-3">
+									<input
+										type="checkbox"
+										checked={profile.enabled}
+										onChange={(e) => updateProfile(id, "enabled", e.target.checked)}
+										className="h-4 w-4"
+									/>
+									<span className="text-sm font-medium text-ink">{id}</span>
+								</div>
+								<button
+									onClick={() => handleDeleteProfile(id)}
+									className="text-tiny text-red-400 hover:text-red-300"
+								>
+									Delete
+								</button>
+							</div>
+
+							<div className="flex flex-col gap-3">
+								<label className="block">
+									<span className="text-tiny font-medium text-ink-dull">Command</span>
+									<Input
+										type="text"
+										value={profile.command}
+										onChange={(e) => updateProfile(id, "command", e.target.value)}
+										placeholder="claude"
+										className="mt-1"
+									/>
+								</label>
+
+								<label className="block">
+									<span className="text-tiny font-medium text-ink-dull">Arguments (space-separated)</span>
+									<Input
+										type="text"
+										value={profile.args}
+										onChange={(e) => updateProfile(id, "args", e.target.value)}
+										placeholder="code acp"
+										className="mt-1"
+									/>
+								</label>
+
+								<label className="block">
+									<span className="text-tiny font-medium text-ink-dull">Timeout (seconds)</span>
+									<Input
+										type="number"
+										value={profile.timeout}
+										onChange={(e) => updateProfile(id, "timeout", e.target.value)}
+										min="1"
+										className="mt-1"
+									/>
+								</label>
+
+								<label className="block">
+									<span className="text-tiny font-medium text-ink-dull">Environment (KEY=VALUE, one per line)</span>
+									<textarea
+										value={profile.env}
+										onChange={(e) => updateProfile(id, "env", e.target.value)}
+										placeholder={"ANTHROPIC_API_KEY=sk-..."}
+										rows={2}
+										className="mt-1 w-full rounded-md border border-app-line bg-app-input px-3 py-2 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none"
+									/>
+								</label>
+
+								<Button
+									onClick={() => handleSaveProfile(id)}
+									loading={updateMutation.isPending}
+									className="self-start"
+								>
+									Save {id}
+								</Button>
+							</div>
+						</div>
+					))}
+
+					{/* Add new profile */}
+					<div className="rounded-lg border border-dashed border-app-line bg-app-box/50 p-4">
+						<span className="text-sm font-medium text-ink">Add Profile</span>
+						<div className="mt-2 flex gap-2">
+							<Input
+								type="text"
+								value={newId}
+								onChange={(e) => setNewId(e.target.value)}
+								placeholder="claude-code"
+								className="flex-1"
+								onKeyDown={(e) => e.key === "Enter" && handleAddProfile()}
+							/>
+							<Button onClick={handleAddProfile}>
+								Add
+							</Button>
+						</div>
+					</div>
 				</div>
 			)}
 

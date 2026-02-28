@@ -186,6 +186,8 @@ pub struct ChannelState {
     /// Input senders for interactive workers, keyed by worker ID.
     /// Used by the route tool to deliver follow-up messages.
     pub worker_inputs: Arc<RwLock<HashMap<WorkerId, tokio::sync::mpsc::Sender<String>>>>,
+    /// Cancellation tokens for graceful worker shutdown (used by ACP workers).
+    pub worker_cancellations: Arc<RwLock<HashMap<WorkerId, tokio_util::sync::CancellationToken>>>,
     pub status_block: Arc<RwLock<StatusBlock>>,
     pub deps: AgentDeps,
     pub conversation_logger: ConversationLogger,
@@ -199,8 +201,18 @@ pub struct ChannelState {
 
 impl ChannelState {
     /// Cancel a running worker by aborting its tokio task and cleaning up state.
+    ///
+    /// For ACP workers, triggers the cancellation token first for graceful shutdown
+    /// (sending CancelNotification to the agent), then falls back to hard abort.
     /// Returns an error message if the worker is not found.
     pub async fn cancel_worker(&self, worker_id: WorkerId) -> std::result::Result<(), String> {
+        // Try graceful cancellation first (for ACP workers with cancellation tokens)
+        if let Some(token) = self.worker_cancellations.write().await.remove(&worker_id) {
+            token.cancel();
+            // Give the worker a moment to shut down gracefully before hard abort
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+        }
+
         let handle = self.worker_handles.write().await.remove(&worker_id);
         let removed = self
             .active_workers
@@ -337,6 +349,7 @@ impl Channel {
             active_workers: active_workers.clone(),
             worker_handles: Arc::new(RwLock::new(HashMap::new())),
             worker_inputs: Arc::new(RwLock::new(HashMap::new())),
+            worker_cancellations: Arc::new(RwLock::new(HashMap::new())),
             status_block: status_block.clone(),
             deps: deps.clone(),
             conversation_logger,
@@ -812,10 +825,18 @@ impl Channel {
         let browser_enabled = rc.browser_config.load().enabled;
         let web_search_enabled = rc.brave_search_key.load().is_some();
         let opencode_enabled = rc.opencode.load().enabled;
+        let acp_agents: Vec<String> = rc
+            .acp
+            .load()
+            .iter()
+            .filter(|(_, c)| c.enabled)
+            .map(|(id, _)| id.clone())
+            .collect();
         let worker_capabilities = prompt_engine.render_worker_capabilities(
             browser_enabled,
             web_search_enabled,
             opencode_enabled,
+            &acp_agents,
         )?;
 
         let temporal_context = TemporalContext::from_runtime(rc.as_ref());
@@ -1114,10 +1135,18 @@ impl Channel {
         let browser_enabled = rc.browser_config.load().enabled;
         let web_search_enabled = rc.brave_search_key.load().is_some();
         let opencode_enabled = rc.opencode.load().enabled;
+        let acp_agents: Vec<String> = rc
+            .acp
+            .load()
+            .iter()
+            .filter(|(_, c)| c.enabled)
+            .map(|(id, _)| id.clone())
+            .collect();
         let worker_capabilities = prompt_engine.render_worker_capabilities(
             browser_enabled,
             web_search_enabled,
             opencode_enabled,
+            &acp_agents,
         )?;
 
         let temporal_context = TemporalContext::from_runtime(rc.as_ref());
@@ -2281,6 +2310,156 @@ pub async fn spawn_opencode_worker_from_state(
         .ok();
 
     tracing::info!(worker_id = %worker_id, task = %task, "OpenCode worker spawned");
+
+    Ok(worker_id)
+}
+
+/// Spawn an ACP worker from channel state.
+///
+/// Resolves which ACP profile to use (auto-select if only one is enabled,
+/// or require explicit `acp_id`), creates the worker, and spawns it as
+/// a background task.
+pub async fn spawn_acp_worker_from_state(
+    state: &ChannelState,
+    task: impl Into<String>,
+    directory: &str,
+    acp_id: Option<&str>,
+    interactive: bool,
+) -> std::result::Result<crate::WorkerId, AgentError> {
+    check_worker_limit(state).await?;
+    ensure_dispatch_readiness(state, "acp_worker");
+    let task = task.into();
+    let directory = std::path::PathBuf::from(directory);
+
+    let rc = &state.deps.runtime_config;
+    let prompt_engine = rc.prompts.load();
+    let temporal_context = TemporalContext::from_runtime(rc.as_ref());
+    let worker_task =
+        build_worker_task_with_temporal_context(&task, &temporal_context, &prompt_engine)
+            .map_err(|error| AgentError::Other(anyhow::anyhow!("{error}")))?;
+
+    // Load ACP profiles and resolve which one to use
+    let acp_configs = rc.acp.load();
+    let enabled_profiles: Vec<(&String, &crate::config::AcpAgentConfig)> = acp_configs
+        .iter()
+        .filter(|(_, config)| config.enabled)
+        .collect();
+
+    if enabled_profiles.is_empty() {
+        return Err(AgentError::Other(anyhow::anyhow!(
+            "No ACP worker profiles are enabled in config"
+        )));
+    }
+
+    let selected_config = if let Some(id) = acp_id {
+        // Explicit profile requested
+        acp_configs.get(id).ok_or_else(|| {
+            let available: Vec<&String> = enabled_profiles.iter().map(|(k, _)| *k).collect();
+            AgentError::Other(anyhow::anyhow!(
+                "ACP profile '{id}' not found. Available: {available:?}"
+            ))
+        })?
+    } else if enabled_profiles.len() == 1 {
+        // Auto-select the only enabled profile
+        enabled_profiles[0].1
+    } else {
+        // Multiple enabled, require explicit selection
+        let available: Vec<&String> = enabled_profiles.iter().map(|(k, _)| *k).collect();
+        return Err(AgentError::Other(anyhow::anyhow!(
+            "Multiple ACP profiles enabled ({available:?}). Specify acp_id to choose one."
+        )));
+    };
+
+    if !selected_config.enabled {
+        return Err(AgentError::Other(anyhow::anyhow!(
+            "ACP profile '{}' is not enabled",
+            selected_config.id
+        )));
+    }
+
+    let cancellation_token = tokio_util::sync::CancellationToken::new();
+    let sandbox = state.deps.sandbox.clone();
+
+    let worker = if interactive {
+        let (worker, input_tx) = crate::acp::AcpWorker::new_interactive(
+            Some(state.channel_id.clone()),
+            state.deps.agent_id.clone(),
+            &worker_task,
+            directory,
+            selected_config.clone(),
+            sandbox,
+            state.deps.event_tx.clone(),
+            cancellation_token.clone(),
+        );
+        let worker_id = worker.id;
+        state
+            .worker_inputs
+            .write()
+            .await
+            .insert(worker_id, input_tx);
+        worker
+    } else {
+        crate::acp::AcpWorker::new(
+            Some(state.channel_id.clone()),
+            state.deps.agent_id.clone(),
+            &worker_task,
+            directory,
+            selected_config.clone(),
+            sandbox,
+            state.deps.event_tx.clone(),
+            cancellation_token.clone(),
+        )
+    };
+
+    let worker_id = worker.id;
+
+    // Store cancellation token for graceful shutdown
+    state
+        .worker_cancellations
+        .write()
+        .await
+        .insert(worker_id, cancellation_token);
+
+    let worker_span = tracing::info_span!(
+        "worker.run",
+        worker_id = %worker_id,
+        channel_id = %state.channel_id,
+        task = %task,
+        worker_type = "acp",
+    );
+    let handle = spawn_worker_task(
+        worker_id,
+        state.deps.event_tx.clone(),
+        state.deps.agent_id.clone(),
+        Some(state.channel_id.clone()),
+        async move {
+            let result = worker.run().await?;
+            Ok::<String, anyhow::Error>(result.result_text)
+        }
+        .instrument(worker_span),
+    );
+
+    state.worker_handles.write().await.insert(worker_id, handle);
+
+    let acp_task = format!("[acp] {task}");
+    {
+        let mut status = state.status_block.write().await;
+        status.add_worker(worker_id, &acp_task, false);
+    }
+
+    state
+        .deps
+        .event_tx
+        .send(crate::ProcessEvent::WorkerStarted {
+            agent_id: state.deps.agent_id.clone(),
+            worker_id,
+            channel_id: Some(state.channel_id.clone()),
+            task: acp_task,
+            worker_type: "acp".into(),
+        })
+        .ok();
+
+    tracing::info!(worker_id = %worker_id, task = %task, "ACP worker spawned");
 
     Ok(worker_id)
 }

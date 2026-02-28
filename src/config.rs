@@ -548,6 +548,8 @@ pub struct DefaultsConfig {
     pub history_backfill_count: usize,
     pub cron: Vec<CronDef>,
     pub opencode: OpenCodeConfig,
+    /// ACP worker profiles, keyed by profile name.
+    pub acp: HashMap<String, AcpAgentConfig>,
     /// Worker log mode: "errors_only", "all_separate", or "all_combined".
     pub worker_log_mode: crate::settings::WorkerLogMode,
 }
@@ -578,6 +580,7 @@ impl std::fmt::Debug for DefaultsConfig {
             .field("history_backfill_count", &self.history_backfill_count)
             .field("cron", &self.cron)
             .field("opencode", &self.opencode)
+            .field("acp", &self.acp)
             .field("worker_log_mode", &self.worker_log_mode)
             .finish()
     }
@@ -734,6 +737,40 @@ impl Default for BrowserConfig {
             evaluate_enabled: false,
             executable_path: None,
             screenshot_dir: None,
+        }
+    }
+}
+
+/// ACP (Agent Client Protocol) worker profile configuration.
+///
+/// Each profile defines an external coding agent that communicates over stdio
+/// using the Agent Client Protocol. Multiple profiles can be configured under
+/// `[defaults.acp.<id>]` in the TOML config.
+#[derive(Debug, Clone)]
+pub struct AcpAgentConfig {
+    /// Profile name (e.g., "claude-code", "codex").
+    pub id: String,
+    /// Whether this profile is enabled.
+    pub enabled: bool,
+    /// Command to launch the ACP agent. Supports "env:VAR_NAME" references.
+    pub command: String,
+    /// Arguments to pass to the command (e.g., `["acp"]`).
+    pub args: Vec<String>,
+    /// Extra environment variables to set for the subprocess.
+    pub env: HashMap<String, String>,
+    /// Session timeout in seconds. The worker is killed if it exceeds this.
+    pub timeout: u64,
+}
+
+impl Default for AcpAgentConfig {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            enabled: false,
+            command: String::new(),
+            args: Vec::new(),
+            env: HashMap::new(),
+            timeout: 300,
         }
     }
 }
@@ -1050,6 +1087,7 @@ impl Default for DefaultsConfig {
             history_backfill_count: 50,
             cron: Vec::new(),
             opencode: OpenCodeConfig::default(),
+            acp: HashMap::new(),
             worker_log_mode: crate::settings::WorkerLogMode::default(),
         }
     }
@@ -2546,6 +2584,9 @@ struct TomlDefaultsConfig {
     cron_timezone: Option<String>,
     user_timezone: Option<String>,
     opencode: Option<TomlOpenCodeConfig>,
+    /// ACP profiles: `[defaults.acp.<id>]` sections.
+    #[serde(default)]
+    acp: HashMap<String, TomlAcpProfile>,
     worker_log_mode: Option<String>,
 }
 
@@ -2644,6 +2685,19 @@ struct TomlOpenCodePermissions {
     edit: Option<String>,
     bash: Option<String>,
     webfetch: Option<String>,
+}
+
+/// TOML representation of a single ACP profile.
+/// Parsed from `[defaults.acp.<id>]` sections.
+#[derive(Deserialize)]
+struct TomlAcpProfile {
+    enabled: Option<bool>,
+    command: Option<String>,
+    #[serde(default)]
+    args: Vec<String>,
+    #[serde(default)]
+    env: HashMap<String, String>,
+    timeout: Option<u64>,
 }
 
 #[derive(Deserialize, Clone)]
@@ -4394,6 +4448,24 @@ impl Config {
                     }
                 })
                 .unwrap_or_else(|| base_defaults.opencode.clone()),
+            acp: toml
+                .defaults
+                .acp
+                .into_iter()
+                .map(|(id, profile)| {
+                    let command_raw = profile.command.unwrap_or_default();
+                    let resolved_command = resolve_env_value(&command_raw).unwrap_or(command_raw);
+                    let config = AcpAgentConfig {
+                        id: id.clone(),
+                        enabled: profile.enabled.unwrap_or(false),
+                        command: resolved_command,
+                        args: profile.args,
+                        env: profile.env,
+                        timeout: profile.timeout.unwrap_or(300),
+                    };
+                    (id, config)
+                })
+                .collect(),
             worker_log_mode: toml
                 .defaults
                 .worker_log_mode
@@ -5138,6 +5210,8 @@ pub struct RuntimeConfig {
     pub opencode: ArcSwap<OpenCodeConfig>,
     /// Shared pool of OpenCode server processes. Lazily initialized on first use.
     pub opencode_server_pool: Arc<crate::opencode::OpenCodeServerPool>,
+    /// ACP worker profiles, keyed by profile name.
+    pub acp: ArcSwap<HashMap<String, AcpAgentConfig>>,
     /// Cron store, set after agent initialization.
     pub cron_store: ArcSwap<Option<Arc<crate::cron::CronStore>>>,
     /// Cron scheduler, set after agent initialization.
@@ -5194,6 +5268,7 @@ impl RuntimeConfig {
             skills: ArcSwap::from_pointee(skills),
             opencode: ArcSwap::from_pointee(defaults.opencode.clone()),
             opencode_server_pool: Arc::new(server_pool),
+            acp: ArcSwap::from_pointee(defaults.acp.clone()),
             cron_store: ArcSwap::from_pointee(None),
             cron_scheduler: ArcSwap::from_pointee(None),
             settings: ArcSwap::from_pointee(None),
