@@ -20,7 +20,7 @@ use agent_client_protocol::{
 use anyhow::{Context as _, bail};
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
@@ -148,6 +148,13 @@ impl AcpWorker {
                 Ok(worker_result)
             }
             Ok(Err(err)) => {
+                if err.downcast_ref::<Cancelled>().is_some() {
+                    self.send_status("cancelled");
+                    process.kill().await;
+                    return Err(err);
+                }
+
+                self.send_status("failed");
                 // Session error — collect stderr for diagnostics
                 let stderr = process.stderr_output().await;
                 process.kill().await;
@@ -170,6 +177,8 @@ impl AcpWorker {
                     timeout_secs,
                     "ACP worker timed out"
                 );
+                self.send_status("timed out");
+                self.cancellation_token.cancel();
                 process.kill().await;
                 bail!("ACP worker timed out after {timeout_secs}s")
             }
@@ -179,9 +188,9 @@ impl AcpWorker {
     /// Run the ACP protocol session (initialize, prompt, process notifications).
     ///
     /// The `agent-client-protocol` crate's `Client` trait is `!Send`, so the
-    /// session must run on a `LocalSet`. We use `spawn_blocking` +
-    /// `Handle::block_on` to isolate the `!Send` work while keeping the outer
-    /// future `Send` (required by `tokio::spawn` in `spawn_worker_task`).
+    /// session must run on a `LocalSet`. Run that `LocalSet` on a dedicated
+    /// OS thread and deliver the result back via a oneshot channel so long-lived
+    /// ACP sessions do not occupy Tokio's blocking thread pool.
     async fn run_session(
         &mut self,
         stdin: tokio::process::ChildStdin,
@@ -202,187 +211,217 @@ impl AcpWorker {
         let result_text_clone = result_text.clone();
 
         // Capture the current runtime handle so we can re-enter it from the
-        // blocking thread. This lets us use the same I/O driver for the piped
+        // dedicated session thread. This lets us use the same I/O driver for the piped
         // stdin/stdout while running !Send futures on a LocalSet.
         let rt_handle = tokio::runtime::Handle::current();
+        let (result_tx, result_rx) = oneshot::channel();
 
-        tokio::task::spawn_blocking(move || {
-            rt_handle.block_on(async move {
-                let local = tokio::task::LocalSet::new();
-                local
-                    .run_until(async move {
-                        // Create the ACP client
-                        let client = SpacebotAcpClient::new(
-                            working_dir.clone(),
-                            sandbox,
-                            event_tx.clone(),
-                            agent_id.clone(),
-                            worker_id,
-                            channel_id.clone(),
-                            result_text_clone,
-                        );
+        std::thread::Builder::new()
+            .name(format!("acp-session-{worker_id}"))
+            .spawn(move || {
+                let result = rt_handle.block_on(async move {
+                    let local = tokio::task::LocalSet::new();
+                    local
+                        .run_until(async move {
+                            // Create the ACP client
+                            let client = SpacebotAcpClient::new(
+                                working_dir.clone(),
+                                sandbox,
+                                event_tx.clone(),
+                                agent_id.clone(),
+                                worker_id,
+                                channel_id.clone(),
+                                result_text_clone,
+                            );
 
-                        // Wrap stdin/stdout for the async I/O the crate expects
-                        let async_stdin =
-                            tokio_util::compat::TokioAsyncWriteCompatExt::compat_write(stdin);
-                        let async_stdout =
-                            tokio_util::compat::TokioAsyncReadCompatExt::compat(stdout);
+                            // Wrap stdin/stdout for the async I/O the crate expects
+                            let async_stdin =
+                                tokio_util::compat::TokioAsyncWriteCompatExt::compat_write(stdin);
+                            let async_stdout =
+                                tokio_util::compat::TokioAsyncReadCompatExt::compat(stdout);
 
-                        let (connection, io_task) =
-                            ClientSideConnection::new(client, async_stdin, async_stdout, |fut| {
-                                tokio::task::spawn_local(fut);
+                            let (connection, io_task) =
+                                ClientSideConnection::new(client, async_stdin, async_stdout, |fut| {
+                                    tokio::task::spawn_local(fut);
+                                });
+
+                            // Spawn the I/O handler
+                            let io_handle = tokio::task::spawn_local(async move {
+                                if let Err(e) = io_task.await {
+                                    tracing::trace!(error = %e, "ACP I/O task ended");
+                                }
                             });
 
-                        // Spawn the I/O handler
-                        let io_handle = tokio::task::spawn_local(async move {
-                            if let Err(e) = io_task.await {
-                                tracing::trace!(error = %e, "ACP I/O task ended");
-                            }
-                        });
+                            // Initialize the connection
+                            let _init_response = connection
+                                .initialize(
+                                    InitializeRequest::new(ProtocolVersion::V1)
+                                        .client_capabilities(
+                                            ClientCapabilities::new()
+                                                .fs(FileSystemCapability::new()
+                                                    .read_text_file(true)
+                                                    .write_text_file(true))
+                                                .terminal(true),
+                                        )
+                                        .client_info(Implementation::new(
+                                            "spacebot",
+                                            env!("CARGO_PKG_VERSION"),
+                                        )),
+                                )
+                                .await
+                                .context("ACP initialization failed")?;
 
-                        // Initialize the connection
-                        let _init_response = connection
-                            .initialize(
-                                InitializeRequest::new(ProtocolVersion::V1)
-                                    .client_capabilities(
-                                        ClientCapabilities::new()
-                                            .fs(FileSystemCapability::new()
-                                                .read_text_file(true)
-                                                .write_text_file(true))
-                                            .terminal(true),
-                                    )
-                                    .client_info(Implementation::new(
-                                        "spacebot",
-                                        env!("CARGO_PKG_VERSION"),
-                                    )),
-                            )
-                            .await
-                            .context("ACP initialization failed")?;
+                            // Create a new session
+                            let session_response = connection
+                                .new_session(NewSessionRequest::new(&working_dir))
+                                .await
+                                .context("ACP session creation failed")?;
 
-                        // Create a new session
-                        let session_response = connection
-                            .new_session(NewSessionRequest::new(&working_dir))
-                            .await
-                            .context("ACP session creation failed")?;
+                            let session_id = session_response.session_id;
 
-                        let session_id = session_response.session_id;
+                            tracing::info!(
+                                worker_id = %worker_id,
+                                session_id = %session_id,
+                                "ACP session created"
+                            );
 
-                        tracing::info!(
-                            worker_id = %worker_id,
-                            session_id = %session_id,
-                            "ACP session created"
-                        );
-
-                        let _ = event_tx.send(ProcessEvent::WorkerStatus {
-                            agent_id: agent_id.clone(),
-                            worker_id,
-                            channel_id: channel_id.clone(),
-                            status: "sending task".to_string(),
-                        });
-
-                        // Check cancellation before sending prompt
-                        if cancellation_token.is_cancelled() {
-                            let _ = connection
-                                .cancel(CancelNotification::new(session_id.clone()))
-                                .await;
-                            bail!(Cancelled);
-                        }
-
-                        // Send the initial prompt
-                        let prompt_response = connection
-                            .prompt(PromptRequest::new(
-                                session_id.clone(),
-                                vec![ContentBlock::Text(TextContent::new(&task))],
-                            ))
-                            .await
-                            .context("ACP prompt failed")?;
-
-                        tracing::info!(
-                            worker_id = %worker_id,
-                            stop_reason = ?prompt_response.stop_reason,
-                            "ACP initial prompt completed"
-                        );
-
-                        // Interactive follow-up loop
-                        if let Some(mut input_rx) = input_rx {
                             let _ = event_tx.send(ProcessEvent::WorkerStatus {
                                 agent_id: agent_id.clone(),
                                 worker_id,
                                 channel_id: channel_id.clone(),
-                                status: "waiting for follow-up".to_string(),
+                                status: "sending task".to_string(),
                             });
 
-                            loop {
-                                tokio::select! {
-                                    follow_up = input_rx.recv() => {
-                                        let Some(follow_up) = follow_up else {
-                                            break; // Channel closed
-                                        };
+                            // Check cancellation before sending prompt
+                            if cancellation_token.is_cancelled() {
+                                let _ = connection
+                                    .cancel(CancelNotification::new(session_id.clone()))
+                                    .await;
+                                bail!(Cancelled);
+                            }
 
-                                        if cancellation_token.is_cancelled() {
+                            // Send the initial prompt
+                            let prompt_response = connection
+                                .prompt(PromptRequest::new(
+                                    session_id.clone(),
+                                    vec![ContentBlock::Text(TextContent::new(&task))],
+                                ))
+                                .await
+                                .context("ACP prompt failed")?;
+
+                            tracing::info!(
+                                worker_id = %worker_id,
+                                stop_reason = ?prompt_response.stop_reason,
+                                "ACP initial prompt completed"
+                            );
+
+                            // Interactive follow-up loop
+                            if let Some(mut input_rx) = input_rx {
+                                let _ = event_tx.send(ProcessEvent::WorkerStatus {
+                                    agent_id: agent_id.clone(),
+                                    worker_id,
+                                    channel_id: channel_id.clone(),
+                                    status: "waiting for follow-up".to_string(),
+                                });
+
+                                loop {
+                                    tokio::select! {
+                                        follow_up = input_rx.recv() => {
+                                            let Some(follow_up) = follow_up else {
+                                                break; // Channel closed
+                                            };
+
+                                            if cancellation_token.is_cancelled() {
+                                                let _ = connection.cancel(
+                                                    CancelNotification::new(session_id.clone()),
+                                                ).await;
+                                                break;
+                                            }
+
+                                            let _ = event_tx.send(ProcessEvent::WorkerStatus {
+                                                agent_id: agent_id.clone(),
+                                                worker_id,
+                                                channel_id: channel_id.clone(),
+                                                status: "processing follow-up".to_string(),
+                                            });
+
+                                            let previous_result_len = result_text
+                                                .lock()
+                                                .map(|text| text.len())
+                                                .unwrap_or(0);
+
+                                            match connection.prompt(PromptRequest::new(
+                                                session_id.clone(),
+                                                vec![ContentBlock::Text(TextContent::new(&follow_up))],
+                                            )).await {
+                                                Ok(_) => {
+                                                    let follow_up_result = result_text
+                                                        .lock()
+                                                        .ok()
+                                                        .and_then(|text| {
+                                                            text.get(previous_result_len..)
+                                                                .map(|slice| slice.to_string())
+                                                        })
+                                                        .unwrap_or_default();
+
+                                                    if !follow_up_result.trim().is_empty() {
+                                                        let _ = event_tx.send(ProcessEvent::WorkerResult {
+                                                            agent_id: agent_id.clone(),
+                                                            worker_id,
+                                                            channel_id: channel_id.clone(),
+                                                            result: follow_up_result,
+                                                        });
+                                                    }
+
+                                                    let _ = event_tx.send(ProcessEvent::WorkerStatus {
+                                                        agent_id: agent_id.clone(),
+                                                        worker_id,
+                                                        channel_id: channel_id.clone(),
+                                                        status: "waiting for follow-up".to_string(),
+                                                    });
+                                                }
+                                                Err(error) => {
+                                                    tracing::error!(
+                                                        worker_id = %worker_id,
+                                                        %error,
+                                                        "ACP follow-up failed"
+                                                    );
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                        _ = cancellation_token.cancelled() => {
                                             let _ = connection.cancel(
                                                 CancelNotification::new(session_id.clone()),
                                             ).await;
                                             break;
                                         }
-
-                                        let _ = event_tx.send(ProcessEvent::WorkerStatus {
-                                            agent_id: agent_id.clone(),
-                                            worker_id,
-                                            channel_id: channel_id.clone(),
-                                            status: "processing follow-up".to_string(),
-                                        });
-
-                                        match connection.prompt(PromptRequest::new(
-                                            session_id.clone(),
-                                            vec![ContentBlock::Text(TextContent::new(&follow_up))],
-                                        )).await {
-                                            Ok(_) => {
-                                                let _ = event_tx.send(ProcessEvent::WorkerStatus {
-                                                    agent_id: agent_id.clone(),
-                                                    worker_id,
-                                                    channel_id: channel_id.clone(),
-                                                    status: "waiting for follow-up".to_string(),
-                                                });
-                                            }
-                                            Err(error) => {
-                                                tracing::error!(
-                                                    worker_id = %worker_id,
-                                                    %error,
-                                                    "ACP follow-up failed"
-                                                );
-                                                break;
-                                            }
-                                        }
-                                    }
-                                    _ = cancellation_token.cancelled() => {
-                                        let _ = connection.cancel(
-                                            CancelNotification::new(session_id.clone()),
-                                        ).await;
-                                        break;
                                     }
                                 }
                             }
-                        }
 
-                        // Result text was accumulated by the client's
-                        // session_notification handler via the shared
-                        // Arc<Mutex<String>>.
-                        let result_text = result_text.lock().map(|s| s.clone()).unwrap_or_default();
+                            // Result text was accumulated by the client's
+                            // session_notification handler via the shared
+                            // Arc<Mutex<String>>.
+                            let result_text = result_text.lock().map(|s| s.clone()).unwrap_or_default();
 
-                        // Clean up
-                        io_handle.abort();
+                            // Clean up
+                            io_handle.abort();
 
-                        Ok(AcpWorkerResult {
-                            session_id: session_id.to_string(),
-                            result_text,
+                            Ok(AcpWorkerResult {
+                                session_id: session_id.to_string(),
+                                result_text,
+                            })
                         })
-                    })
-                    .await
+                        .await
+                });
+                let _ = result_tx.send(result);
             })
-        })
-        .await
-        .map_err(|e| anyhow::anyhow!("ACP session thread panicked: {e}"))?
+            .context("failed to spawn ACP session thread")?;
+
+        result_rx
+            .await
+            .map_err(|_| anyhow::anyhow!("ACP session thread terminated before returning a result"))?
     }
 
     /// Send a status update via the process event bus.

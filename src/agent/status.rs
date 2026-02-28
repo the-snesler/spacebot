@@ -60,6 +60,18 @@ pub enum CompletedItemType {
     Worker,
 }
 
+fn truncate_preview(text: &str, max_chars: usize) -> String {
+    let mut preview = String::new();
+    for (index, character) in text.chars().enumerate() {
+        if index >= max_chars {
+            preview.push_str("...");
+            return preview;
+        }
+        preview.push(character);
+    }
+    preview
+}
+
 impl StatusBlock {
     /// Create a new empty status block.
     pub fn new() -> Self {
@@ -95,6 +107,20 @@ impl StatusBlock {
                             completed_at: Utc::now(),
                             result_summary: result.clone(),
                         });
+                    }
+                }
+            }
+            ProcessEvent::WorkerResult {
+                worker_id,
+                result,
+                ..
+            } => {
+                if let Some(worker) = self.active_workers.iter_mut().find(|w| w.id == *worker_id) {
+                    let first_line = result.lines().next().unwrap_or_default().trim();
+                    if first_line.is_empty() {
+                        worker.status = "result received".to_string();
+                    } else {
+                        worker.status = format!("result: {}", truncate_preview(first_line, 100));
                     }
                 }
             }

@@ -134,6 +134,12 @@ pub enum ProcessEvent {
         notify: bool,
         success: bool,
     },
+    WorkerResult {
+        agent_id: AgentId,
+        worker_id: WorkerId,
+        channel_id: Option<ChannelId>,
+        result: String,
+    },
     ToolStarted {
         agent_id: AgentId,
         process_id: ProcessId,

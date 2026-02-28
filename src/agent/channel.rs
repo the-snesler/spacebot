@@ -825,13 +825,7 @@ impl Channel {
         let browser_enabled = rc.browser_config.load().enabled;
         let web_search_enabled = rc.brave_search_key.load().is_some();
         let opencode_enabled = rc.opencode.load().enabled;
-        let acp_agents: Vec<String> = rc
-            .acp
-            .load()
-            .iter()
-            .filter(|(_, c)| c.enabled)
-            .map(|(id, _)| id.clone())
-            .collect();
+        let acp_agents = rc.enabled_acp_agent_ids();
         let worker_capabilities = prompt_engine.render_worker_capabilities(
             browser_enabled,
             web_search_enabled,
@@ -1135,13 +1129,7 @@ impl Channel {
         let browser_enabled = rc.browser_config.load().enabled;
         let web_search_enabled = rc.brave_search_key.load().is_some();
         let opencode_enabled = rc.opencode.load().enabled;
-        let acp_agents: Vec<String> = rc
-            .acp
-            .load()
-            .iter()
-            .filter(|(_, c)| c.enabled)
-            .map(|(id, _)| id.clone())
-            .collect();
+        let acp_agents = rc.enabled_acp_agent_ids();
         let worker_capabilities = prompt_engine.render_worker_capabilities(
             browser_enabled,
             web_search_enabled,
@@ -1610,6 +1598,22 @@ impl Channel {
                 worker_id, status, ..
             } => {
                 run_logger.log_worker_status(*worker_id, status);
+            }
+            ProcessEvent::WorkerResult {
+                worker_id,
+                result,
+                ..
+            } => {
+                run_logger.log_worker_status(*worker_id, "intermediate result received");
+                self.pending_results.push(PendingResult {
+                    process_type: "worker",
+                    process_id: worker_id.to_string(),
+                    result: result.clone(),
+                    success: true,
+                });
+                should_retrigger = true;
+
+                tracing::info!(worker_id = %worker_id, "worker intermediate result received, result queued for retrigger");
             }
             ProcessEvent::WorkerComplete {
                 worker_id,
@@ -2687,6 +2691,10 @@ fn event_is_for_channel(event: &ProcessEvent, channel_id: &ChannelId) -> bool {
             ..
         } => event_channel.as_ref() == Some(channel_id),
         ProcessEvent::WorkerStatus {
+            channel_id: event_channel,
+            ..
+        } => event_channel.as_ref() == Some(channel_id),
+        ProcessEvent::WorkerResult {
             channel_id: event_channel,
             ..
         } => event_channel.as_ref() == Some(channel_id),

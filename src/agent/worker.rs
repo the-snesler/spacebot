@@ -6,7 +6,7 @@ use crate::error::Result;
 use crate::hooks::SpacebotHook;
 use crate::llm::SpacebotModel;
 use crate::llm::routing::is_context_overflow_error;
-use crate::{AgentDeps, ChannelId, ProcessId, ProcessType, WorkerId};
+use crate::{AgentDeps, ChannelId, ProcessEvent, ProcessId, ProcessType, WorkerId};
 use rig::agent::AgentBuilder;
 use rig::completion::{CompletionModel, Prompt};
 use std::fmt::Write as _;
@@ -353,7 +353,17 @@ impl Worker {
                         .with_hook(self.hook.clone())
                         .await
                     {
-                        Ok(_response) => break true,
+                        Ok(response) => {
+                            if !response.trim().is_empty() {
+                                let _ = self.deps.event_tx.send(ProcessEvent::WorkerResult {
+                                    agent_id: self.deps.agent_id.clone(),
+                                    worker_id: self.id,
+                                    channel_id: self.channel_id.clone(),
+                                    result: response,
+                                });
+                            }
+                            break true;
+                        }
                         Err(error) if is_context_overflow_error(&error.to_string()) => {
                             follow_up_overflow_retries += 1;
                             if follow_up_overflow_retries > MAX_OVERFLOW_RETRIES {

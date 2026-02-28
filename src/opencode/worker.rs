@@ -190,7 +190,16 @@ impl OpenCodeWorker {
                     .process_events(event_response, &session_id, &server)
                     .await
                 {
-                    Ok(_) => {
+                    Ok(follow_up_result) => {
+                        if !follow_up_result.trim().is_empty() {
+                            let _ = self.event_tx.send(ProcessEvent::WorkerResult {
+                                agent_id: self.agent_id.clone(),
+                                worker_id: self.id,
+                                channel_id: self.channel_id.clone(),
+                                result: follow_up_result,
+                            });
+                        }
+
                         self.send_status("waiting for follow-up");
                     }
                     Err(error) => {
