@@ -752,7 +752,8 @@ pub struct AcpAgentConfig {
     pub id: String,
     /// Whether this profile is enabled.
     pub enabled: bool,
-    /// Command to launch the ACP agent. Supports "env:VAR_NAME" references.
+    /// Command to launch the ACP agent. Supports "env:VAR_NAME" references
+    /// resolved when the worker process is spawned.
     pub command: String,
     /// Arguments to pass to the command (e.g., `["acp"]`).
     pub args: Vec<String>,
@@ -4454,11 +4455,12 @@ impl Config {
                 .into_iter()
                 .map(|(id, profile)| {
                     let command_raw = profile.command.unwrap_or_default();
-                    let resolved_command = resolve_env_value(&command_raw).unwrap_or(command_raw);
                     let config = AcpAgentConfig {
                         id: id.clone(),
                         enabled: profile.enabled.unwrap_or(false),
-                        command: resolved_command,
+                        // Resolve env:VAR at worker spawn time so runtime env changes
+                        // can take effect without restarting the process.
+                        command: command_raw,
                         args: profile.args,
                         env: profile.env,
                         timeout: profile.timeout.unwrap_or(300),
@@ -5301,6 +5303,16 @@ impl RuntimeConfig {
     /// True when branch/worker/cron dispatches should run in fully-ready mode.
     pub fn ready_for_work(&self) -> bool {
         self.work_readiness().ready
+    }
+
+    /// List enabled ACP profile IDs for prompt rendering and capability hints.
+    pub fn enabled_acp_agent_ids(&self) -> Vec<String> {
+        self.acp
+            .load()
+            .iter()
+            .filter(|(_, config)| config.enabled)
+            .map(|(id, _)| id.clone())
+            .collect()
     }
 
     /// Reload tunable config values from a freshly parsed Config.

@@ -23,6 +23,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::io::AsyncReadExt;
 use tokio::process::Child;
 use tokio::sync::broadcast;
@@ -55,10 +56,14 @@ pub struct SpacebotAcpClient {
 /// State for a terminal spawned by the ACP agent.
 struct TerminalState {
     child: Child,
-    /// Captured stdout+stderr output (capped at [`MAX_TERMINAL_OUTPUT_BYTES`]).
+    /// Captured stdout+stderr output (capped at `output_byte_limit`).
     output: Arc<std::sync::Mutex<Vec<u8>>>,
+    /// Per-terminal output cap from the ACP request.
+    output_byte_limit: usize,
+    /// Set when output had to be clipped due to `output_byte_limit`.
+    truncated: Arc<AtomicBool>,
     /// Background task reading the process output.
-    _output_task: JoinHandle<()>,
+    output_task: JoinHandle<()>,
 }
 
 impl SpacebotAcpClient {
@@ -110,8 +115,8 @@ impl SpacebotAcpClient {
             self.working_dir.join(path)
         };
 
-        // Canonicalize what exists, or check prefix for new files
-        let canonical = resolved.canonicalize().unwrap_or_else(|_| resolved.clone());
+        // Canonicalize as much as possible for paths that may not exist yet.
+        let canonical = best_effort_canonicalize(&resolved);
 
         let working_canonical = self
             .working_dir
@@ -125,8 +130,75 @@ impl SpacebotAcpClient {
             ));
         }
 
-        Ok(resolved)
+        ensure_no_symlinks(&working_canonical, &canonical)?;
+
+        Ok(canonical)
     }
+
+    /// Best-effort cleanup for all active terminal subprocesses.
+    fn cleanup_all_terminals(&self) {
+        for (_, mut terminal) in self.terminals.borrow_mut().drain() {
+            let _ = terminal.child.start_kill();
+            terminal.output_task.abort();
+        }
+    }
+}
+
+impl Drop for SpacebotAcpClient {
+    fn drop(&mut self) {
+        self.cleanup_all_terminals();
+    }
+}
+
+/// Canonicalize as much of a path as possible. For non-existent targets,
+/// canonicalize the deepest existing ancestor and append remaining components.
+fn best_effort_canonicalize(path: &Path) -> PathBuf {
+    if let Ok(canonical) = path.canonicalize() {
+        return canonical;
+    }
+
+    let mut existing = path.to_path_buf();
+    let mut suffix = Vec::new();
+    while !existing.exists() {
+        if let Some(file_name) = existing.file_name() {
+            suffix.push(file_name.to_os_string());
+        } else {
+            break;
+        }
+        if !existing.pop() {
+            break;
+        }
+    }
+
+    let base = existing.canonicalize().unwrap_or(existing);
+    let mut result = base;
+    for component in suffix.into_iter().rev() {
+        result.push(component);
+    }
+    result
+}
+
+/// Reject symlinks inside the workspace path to reduce traversal races.
+fn ensure_no_symlinks(
+    workspace_canonical: &Path,
+    canonical_path: &Path,
+) -> agent_client_protocol::Result<()> {
+    let mut check = workspace_canonical.to_path_buf();
+    if let Ok(relative) = canonical_path.strip_prefix(workspace_canonical) {
+        for component in relative.components() {
+            check.push(component);
+            if let Ok(metadata) = std::fs::symlink_metadata(&check)
+                && metadata.file_type().is_symlink()
+            {
+                return Err(agent_client_protocol::Error::new(
+                    -32002,
+                    "Path contains symlink components inside the working directory",
+                ));
+            }
+        }
+    }
+
+    Ok(())
 }
 
 #[async_trait::async_trait(?Send)]
@@ -303,7 +375,9 @@ impl Client for SpacebotAcpClient {
             cmd.env(&env_var.name, &env_var.value);
         }
 
-        cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+        cmd.stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .kill_on_drop(true);
 
         let mut child = cmd.spawn().map_err(|e| {
             agent_client_protocol::Error::internal_error()
@@ -313,11 +387,13 @@ impl Client for SpacebotAcpClient {
         let terminal_id = self.next_terminal_id();
         let output_buf: Arc<std::sync::Mutex<Vec<u8>>> =
             Arc::new(std::sync::Mutex::new(Vec::with_capacity(4096)));
+        let output_truncated = Arc::new(AtomicBool::new(false));
 
         // Merge stdout and stderr into the output buffer
         let stdout = child.stdout.take();
         let stderr = child.stderr.take();
         let output_clone = output_buf.clone();
+        let output_truncated_clone = output_truncated.clone();
         let output_byte_limit = args
             .output_byte_limit
             .map(|l| l as usize)
@@ -343,7 +419,14 @@ impl Client for SpacebotAcpClient {
                             Ok(n) => {
                                 let mut buf = output_clone.lock().unwrap();
                                 let remaining = output_byte_limit.saturating_sub(buf.len());
-                                buf.extend_from_slice(&stdout_buf[..n.min(remaining)]);
+                                if remaining == 0 {
+                                    output_truncated_clone.store(true, Ordering::Relaxed);
+                                } else {
+                                    if n > remaining {
+                                        output_truncated_clone.store(true, Ordering::Relaxed);
+                                    }
+                                    buf.extend_from_slice(&stdout_buf[..n.min(remaining)]);
+                                }
                             }
                             Err(_) => { stdout = None; }
                         }
@@ -359,7 +442,14 @@ impl Client for SpacebotAcpClient {
                             Ok(n) => {
                                 let mut buf = output_clone.lock().unwrap();
                                 let remaining = output_byte_limit.saturating_sub(buf.len());
-                                buf.extend_from_slice(&stderr_buf[..n.min(remaining)]);
+                                if remaining == 0 {
+                                    output_truncated_clone.store(true, Ordering::Relaxed);
+                                } else {
+                                    if n > remaining {
+                                        output_truncated_clone.store(true, Ordering::Relaxed);
+                                    }
+                                    buf.extend_from_slice(&stderr_buf[..n.min(remaining)]);
+                                }
                             }
                             Err(_) => { stderr = None; }
                         }
@@ -377,7 +467,9 @@ impl Client for SpacebotAcpClient {
             TerminalState {
                 child,
                 output: output_buf,
-                _output_task: output_task,
+                output_byte_limit,
+                truncated: output_truncated,
+                output_task,
             },
         );
 
@@ -396,13 +488,10 @@ impl Client for SpacebotAcpClient {
 
         let buf = terminal.output.lock().unwrap();
         let output = String::from_utf8_lossy(&buf).into_owned();
-        let truncated = buf.len() >= MAX_TERMINAL_OUTPUT_BYTES;
+        let truncated =
+            terminal.truncated.load(Ordering::Relaxed) || buf.len() >= terminal.output_byte_limit;
 
-        let exit_status = terminal
-            .child
-            .id()
-            .is_none()
-            .then(TerminalExitStatus::new);
+        let exit_status = terminal.child.id().is_none().then(TerminalExitStatus::new);
 
         drop(buf);
 
@@ -440,7 +529,15 @@ impl Client for SpacebotAcpClient {
             Ok(status) => {
                 let mut es = TerminalExitStatus::new();
                 if let Some(code) = status.code() {
-                    es = es.exit_code(code as u32);
+                    if let Ok(exit_code) = u32::try_from(code) {
+                        es = es.exit_code(exit_code);
+                    } else {
+                        tracing::warn!(
+                            terminal_id = %terminal_id,
+                            exit_code = code,
+                            "Ignoring negative terminal exit code"
+                        );
+                    }
                 }
                 #[cfg(unix)]
                 {
@@ -488,7 +585,7 @@ impl Client for SpacebotAcpClient {
         let taken = self.terminals.borrow_mut().remove(&terminal_id);
         if let Some(mut terminal) = taken {
             let _ = terminal.child.kill().await;
-            terminal._output_task.abort();
+            terminal.output_task.abort();
         }
         Ok(ReleaseTerminalResponse::new())
     }

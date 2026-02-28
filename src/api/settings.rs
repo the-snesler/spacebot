@@ -103,6 +103,21 @@ pub(super) struct RawConfigUpdateResponse {
     message: String,
 }
 
+fn validate_acp_command(command: &str) -> std::result::Result<(), String> {
+    let trimmed = command.trim();
+    if trimmed.is_empty() {
+        return Err("ACP command cannot be empty".to_string());
+    }
+
+    if let Some(var_name) = trimmed.strip_prefix("env:")
+        && var_name.trim().is_empty()
+    {
+        return Err("ACP command env reference must include a variable name".to_string());
+    }
+
+    Ok(())
+}
+
 pub(super) async fn get_global_settings(
     State(state): State<Arc<ApiState>>,
 ) -> Result<Json<GlobalSettingsResponse>, StatusCode> {
@@ -434,6 +449,13 @@ pub(super) async fn update_global_settings(
                             toml_edit::value(enabled);
                     }
                     if let Some(command) = update.command {
+                        if let Err(message) = validate_acp_command(&command) {
+                            return Ok(Json(GlobalSettingsUpdateResponse {
+                                success: false,
+                                message,
+                                requires_restart: false,
+                            }));
+                        }
                         doc["defaults"]["acp"][&profile_name]["command"] =
                             toml_edit::value(command);
                     }
