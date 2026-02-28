@@ -11,7 +11,7 @@ import { faSearch } from "@fortawesome/free-solid-svg-icons";
 
 import { parse as parseToml } from "smol-toml";
 
-type SectionId = "providers" | "channels" | "api-keys" | "server" | "opencode" | "acp" | "worker-logs" | "updates" | "config-file";
+type SectionId = "providers" | "channels" | "api-keys" | "server" | "code-workers" | "worker-logs" | "updates" | "config-file";
 
 const SECTIONS = [
 	{
@@ -39,16 +39,10 @@ const SECTIONS = [
 		description: "API server configuration",
 	},
 	{
-		id: "opencode" as const,
-		label: "OpenCode",
+		id: "code-workers" as const,
+		label: "Code Workers",
 		group: "system" as const,
-		description: "OpenCode worker integration",
-	},
-	{
-		id: "acp" as const,
-		label: "ACP",
-		group: "system" as const,
-		description: "Agent Client Protocol workers",
+		description: "OpenCode and ACP worker integration",
 	},
 	{
 		id: "worker-logs" as const,
@@ -290,12 +284,12 @@ export function Settings() {
 		enabled: activeSection === "providers",
 	});
 
-	// Fetch global settings (only when on api-keys, server, or worker-logs tabs)
+	// Fetch global settings (only when on settings tabs that need global config)
 	const { data: globalSettings, isLoading: globalSettingsLoading } = useQuery({
 		queryKey: ["global-settings"],
 		queryFn: api.globalSettings,
 		staleTime: 5_000,
-		enabled: activeSection === "api-keys" || activeSection === "server" || activeSection === "opencode" || activeSection === "acp" || activeSection === "worker-logs",
+		enabled: activeSection === "api-keys" || activeSection === "server" || activeSection === "code-workers" || activeSection === "worker-logs",
 	});
 
 	const updateMutation = useMutation({
@@ -682,10 +676,8 @@ export function Settings() {
 						<ApiKeysSection settings={globalSettings} isLoading={globalSettingsLoading} />
 					) : activeSection === "server" ? (
 						<ServerSection settings={globalSettings} isLoading={globalSettingsLoading} />
-					) : activeSection === "opencode" ? (
-						<OpenCodeSection settings={globalSettings} isLoading={globalSettingsLoading} />
-					) : activeSection === "acp" ? (
-						<AcpSection settings={globalSettings} isLoading={globalSettingsLoading} />
+					) : activeSection === "code-workers" ? (
+						<CodeWorkersSection settings={globalSettings} isLoading={globalSettingsLoading} />
 					) : activeSection === "worker-logs" ? (
 						<WorkerLogsSection settings={globalSettings} isLoading={globalSettingsLoading} />
 					) : activeSection === "updates" ? (
@@ -885,6 +877,33 @@ function ChannelsSection() {
 interface GlobalSettingsSectionProps {
 	settings: GlobalSettingsResponse | undefined;
 	isLoading: boolean;
+}
+
+function CodeWorkersSection({ settings, isLoading }: GlobalSettingsSectionProps) {
+	return (
+		<div className="mx-auto max-w-2xl px-6 py-6">
+			<div className="mb-6">
+				<h2 className="font-plex text-sm font-semibold text-ink">Code Workers</h2>
+				<p className="mt-1 text-sm text-ink-dull">
+					Configure OpenCode and ACP worker integrations.
+				</p>
+			</div>
+
+			<div className="rounded-lg border border-app-line bg-app-box p-4">
+				<h3 className="font-plex text-sm font-semibold text-ink">OpenCode</h3>
+				<div className="mt-3">
+					<OpenCodeSection settings={settings} isLoading={isLoading} embedded />
+				</div>
+			</div>
+
+			<div className="mt-4 rounded-lg border border-app-line bg-app-box p-4">
+				<h3 className="font-plex text-sm font-semibold text-ink">ACP</h3>
+				<div className="mt-3">
+					<AcpSection settings={settings} isLoading={isLoading} embedded />
+				</div>
+			</div>
+		</div>
+	);
 }
 
 function ApiKeysSection({ settings, isLoading }: GlobalSettingsSectionProps) {
@@ -1269,12 +1288,19 @@ function WorkerLogsSection({ settings, isLoading }: GlobalSettingsSectionProps) 
 	);
 }
 
+function createLocalUid(): string {
+	if (typeof crypto !== "undefined" && crypto.randomUUID) {
+		return crypto.randomUUID();
+	}
+	return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 const PERMISSION_OPTIONS = [
 	{ value: "allow", label: "Allow", description: "Tool can run without restriction" },
 	{ value: "deny", label: "Deny", description: "Tool is completely disabled" },
 ];
 
-function OpenCodeSection({ settings, isLoading }: GlobalSettingsSectionProps) {
+function OpenCodeSection({ settings, isLoading, embedded = false }: GlobalSettingsSectionProps & { embedded?: boolean }) {
 	const queryClient = useQueryClient();
 	const [enabled, setEnabled] = useState(settings?.opencode?.enabled ?? false);
 	const [path, setPath] = useState(settings?.opencode?.path ?? "opencode");
@@ -1348,13 +1374,20 @@ function OpenCodeSection({ settings, isLoading }: GlobalSettingsSectionProps) {
 	};
 
 	return (
-		<div className="mx-auto max-w-2xl px-6 py-6">
-			<div className="mb-6">
-				<h2 className="font-plex text-sm font-semibold text-ink">OpenCode Workers</h2>
-				<p className="mt-1 text-sm text-ink-dull">
+		<div className={embedded ? "" : "mx-auto max-w-2xl px-6 py-6"}>
+			{!embedded && (
+				<div className="mb-6">
+					<h2 className="font-plex text-sm font-semibold text-ink">OpenCode Workers</h2>
+					<p className="mt-1 text-sm text-ink-dull">
+						Spawn <a href="https://opencode.ai" target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">OpenCode</a> coding agents as worker subprocesses. Requires the <code className="rounded bg-app-box px-1 py-0.5 text-tiny text-ink-dull">opencode</code> binary on PATH or a custom path below.
+					</p>
+				</div>
+			)}
+			{embedded && (
+				<p className="mb-3 text-sm text-ink-dull">
 					Spawn <a href="https://opencode.ai" target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">OpenCode</a> coding agents as worker subprocesses. Requires the <code className="rounded bg-app-box px-1 py-0.5 text-tiny text-ink-dull">opencode</code> binary on PATH or a custom path below.
 				</p>
-			</div>
+			)}
 
 			{isLoading ? (
 				<div className="flex items-center gap-2 text-ink-dull">
@@ -1494,25 +1527,41 @@ function OpenCodeSection({ settings, isLoading }: GlobalSettingsSectionProps) {
 	);
 }
 
-function AcpSection({ settings, isLoading }: GlobalSettingsSectionProps) {
+interface AcpProfileDraft {
+	uid: string;
+	originalId: string | null;
+	id: string;
+	enabled: boolean;
+	command: string;
+	args: string;
+	env: string;
+	timeout: string;
+}
+
+function AcpSection({ settings, isLoading, embedded = false }: GlobalSettingsSectionProps & { embedded?: boolean }) {
 	const queryClient = useQueryClient();
-	const [profiles, setProfiles] = useState<Record<string, { enabled: boolean; command: string; args: string; env: string; timeout: string }>>({});
+	const [profiles, setProfiles] = useState<AcpProfileDraft[]>([]);
+	const [removedOriginalIds, setRemovedOriginalIds] = useState<string[]>([]);
 	const [newId, setNewId] = useState("");
 	const [message, setMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
 
 	useEffect(() => {
 		if (settings?.acp) {
-			const mapped: typeof profiles = {};
+			const mapped: AcpProfileDraft[] = [];
 			for (const [id, profile] of Object.entries(settings.acp)) {
-				mapped[id] = {
+				mapped.push({
+					uid: createLocalUid(),
+					originalId: id,
+					id,
 					enabled: profile.enabled,
 					command: profile.command,
 					args: profile.args.join(" "),
 					env: Object.entries(profile.env).map(([k, v]) => `${k}=${v}`).join("\n"),
 					timeout: profile.timeout.toString(),
-				};
+				});
 			}
 			setProfiles(mapped);
+			setRemovedOriginalIds([]);
 		}
 	}, [settings?.acp]);
 
@@ -1531,38 +1580,81 @@ function AcpSection({ settings, isLoading }: GlobalSettingsSectionProps) {
 		},
 	});
 
-	const handleSaveProfile = (id: string) => {
-		const profile = profiles[id];
-		if (!profile) return;
+	const handleSaveAllProfiles = () => {
+		const normalizedIds = new Set<string>();
+		const normalizedProfiles: Array<{
+			profile: AcpProfileDraft;
+			normalizedId: string;
+			payloadValue: {
+				enabled: boolean;
+				command: string;
+				args: string[];
+				env: Record<string, string>;
+				timeout: number;
+			};
+		}> = [];
 
-		const timeout = parseInt(profile.timeout, 10);
-		if (isNaN(timeout) || timeout < 1) {
-			setMessage({ text: "Timeout must be at least 1 second", type: "error" });
-			return;
-		}
-
-		const args = profile.args.trim() ? profile.args.trim().split(/\s+/) : [];
-		const env: Record<string, string> = {};
-		for (const line of profile.env.split("\n")) {
-			const trimmed = line.trim();
-			if (!trimmed) continue;
-			const eqIdx = trimmed.indexOf("=");
-			if (eqIdx > 0) {
-				env[trimmed.slice(0, eqIdx)] = trimmed.slice(eqIdx + 1);
+		for (const profile of profiles) {
+			const normalizedId = profile.id.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "-");
+			if (!normalizedId) {
+				setMessage({ text: "Profile ID is required", type: "error" });
+				return;
 			}
-		}
+			if (normalizedIds.has(normalizedId)) {
+				setMessage({ text: `Profile \"${normalizedId}\" already exists`, type: "error" });
+				return;
+			}
+			normalizedIds.add(normalizedId);
 
-		updateMutation.mutate({
-			acp: {
-				[id]: {
+			const timeout = parseInt(profile.timeout, 10);
+			if (isNaN(timeout) || timeout < 1) {
+				setMessage({ text: `Timeout for \"${normalizedId}\" must be at least 1 second`, type: "error" });
+				return;
+			}
+
+			const args = profile.args.trim() ? profile.args.trim().split(/\s+/) : [];
+			const env: Record<string, string> = {};
+			for (const line of profile.env.split("\n")) {
+				const trimmed = line.trim();
+				if (!trimmed) continue;
+				const eqIdx = trimmed.indexOf("=");
+				if (eqIdx > 0) {
+					env[trimmed.slice(0, eqIdx)] = trimmed.slice(eqIdx + 1);
+				}
+			}
+
+			normalizedProfiles.push({
+				profile,
+				normalizedId,
+				payloadValue: {
 					enabled: profile.enabled,
 					command: profile.command.trim(),
 					args,
 					env,
 					timeout,
 				},
-			},
-		});
+			});
+		}
+
+		const payload: Record<string, { enabled: boolean; command: string; args: string[]; env: Record<string, string>; timeout: number } | null> = {};
+		for (const removedId of removedOriginalIds) {
+			payload[removedId] = null;
+		}
+		for (const { profile, normalizedId, payloadValue } of normalizedProfiles) {
+			payload[normalizedId] = payloadValue;
+			if (profile.originalId && profile.originalId !== normalizedId) {
+				payload[profile.originalId] = null;
+			}
+		}
+
+		updateMutation.mutate({ acp: payload });
+		setProfiles((prev) =>
+			prev.map((entry) => {
+				const normalizedId = entry.id.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "-");
+				return { ...entry, id: normalizedId, originalId: normalizedId };
+			}),
+		);
+		setRemovedOriginalIds([]);
 	};
 
 	const handleAddProfile = () => {
@@ -1571,41 +1663,58 @@ function AcpSection({ settings, isLoading }: GlobalSettingsSectionProps) {
 			setMessage({ text: "Profile ID is required", type: "error" });
 			return;
 		}
-		if (profiles[id]) {
+		if (profiles.some((profile) => profile.id.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "-") === id)) {
 			setMessage({ text: `Profile "${id}" already exists`, type: "error" });
 			return;
 		}
-		setProfiles((prev) => ({
+		setProfiles((prev) => [
 			...prev,
-			[id]: { enabled: false, command: "", args: "", env: "", timeout: "300" },
-		}));
+			{
+				uid: createLocalUid(),
+				originalId: null,
+				id,
+				enabled: false,
+				command: "opencode",
+				args: "acp",
+				env: "",
+				timeout: "300",
+			},
+		]);
 		setNewId("");
 	};
 
-	const handleDeleteProfile = (id: string) => {
-		updateMutation.mutate({ acp: { [id]: null } });
+	const handleDeleteProfile = (uid: string) => {
+		const profile = profiles.find((entry) => entry.uid === uid);
+		if (!profile) return;
+		if (profile.originalId) {
+			setRemovedOriginalIds((prev) => (prev.includes(profile.originalId) ? prev : [...prev, profile.originalId]));
+		}
 		setProfiles((prev) => {
-			const next = { ...prev };
-			delete next[id];
-			return next;
+			return prev.filter((entry) => entry.uid !== uid);
 		});
 	};
 
-	const updateProfile = (id: string, field: string, value: string | boolean) => {
-		setProfiles((prev) => ({
-			...prev,
-			[id]: { ...prev[id], [field]: value },
-		}));
+	const updateProfile = (uid: string, field: keyof AcpProfileDraft, value: string | boolean) => {
+		setProfiles((prev) =>
+			prev.map((entry) => (entry.uid === uid ? { ...entry, [field]: value } : entry)),
+		);
 	};
 
 	return (
-		<div className="mx-auto max-w-2xl px-6 py-6">
-			<div className="mb-6">
-				<h2 className="font-plex text-sm font-semibold text-ink">ACP Workers</h2>
-				<p className="mt-1 text-sm text-ink-dull">
+		<div className={embedded ? "" : "mx-auto max-w-2xl px-6 py-6"}>
+			{!embedded && (
+				<div className="mb-6">
+					<h2 className="font-plex text-sm font-semibold text-ink">ACP Workers</h2>
+					<p className="mt-1 text-sm text-ink-dull">
+						Spawn external coding agents (Claude Code, Codex, Gemini CLI, etc.) as worker subprocesses via the Agent Client Protocol.
+					</p>
+				</div>
+			)}
+			{embedded && (
+				<p className="mb-3 text-sm text-ink-dull">
 					Spawn external coding agents (Claude Code, Codex, Gemini CLI, etc.) as worker subprocesses via the Agent Client Protocol.
 				</p>
-			</div>
+			)}
 
 			{isLoading ? (
 				<div className="flex items-center gap-2 text-ink-dull">
@@ -1614,20 +1723,20 @@ function AcpSection({ settings, isLoading }: GlobalSettingsSectionProps) {
 				</div>
 			) : (
 				<div className="flex flex-col gap-4">
-					{Object.entries(profiles).map(([id, profile]) => (
-						<div key={id} className="rounded-lg border border-app-line bg-app-box p-4">
+					{profiles.map((profile) => (
+						<div key={profile.uid} className="rounded-lg border border-app-line bg-app-box p-4">
 							<div className="mb-3 flex items-center justify-between">
 								<div className="flex items-center gap-3">
 									<input
 										type="checkbox"
 										checked={profile.enabled}
-										onChange={(e) => updateProfile(id, "enabled", e.target.checked)}
+										onChange={(e) => updateProfile(profile.uid, "enabled", e.target.checked)}
 										className="h-4 w-4"
 									/>
-									<span className="text-sm font-medium text-ink">{id}</span>
+									<span className="text-sm font-medium text-ink">{profile.id || "(new profile)"}</span>
 								</div>
 								<button
-									onClick={() => handleDeleteProfile(id)}
+									onClick={() => handleDeleteProfile(profile.uid)}
 									className="text-tiny text-red-400 hover:text-red-300"
 								>
 									Delete
@@ -1636,12 +1745,23 @@ function AcpSection({ settings, isLoading }: GlobalSettingsSectionProps) {
 
 							<div className="flex flex-col gap-3">
 								<label className="block">
+									<span className="text-tiny font-medium text-ink-dull">Profile ID</span>
+									<Input
+										type="text"
+										value={profile.id}
+										onChange={(e) => updateProfile(profile.uid, "id", e.target.value)}
+										placeholder="opencode"
+										className="mt-1"
+									/>
+								</label>
+
+								<label className="block">
 									<span className="text-tiny font-medium text-ink-dull">Command</span>
 									<Input
 										type="text"
 										value={profile.command}
-										onChange={(e) => updateProfile(id, "command", e.target.value)}
-										placeholder="claude"
+										onChange={(e) => updateProfile(profile.uid, "command", e.target.value)}
+										placeholder="opencode"
 										className="mt-1"
 									/>
 								</label>
@@ -1651,8 +1771,8 @@ function AcpSection({ settings, isLoading }: GlobalSettingsSectionProps) {
 									<Input
 										type="text"
 										value={profile.args}
-										onChange={(e) => updateProfile(id, "args", e.target.value)}
-										placeholder="code acp"
+										onChange={(e) => updateProfile(profile.uid, "args", e.target.value)}
+										placeholder="acp"
 										className="mt-1"
 									/>
 								</label>
@@ -1662,7 +1782,7 @@ function AcpSection({ settings, isLoading }: GlobalSettingsSectionProps) {
 									<Input
 										type="number"
 										value={profile.timeout}
-										onChange={(e) => updateProfile(id, "timeout", e.target.value)}
+										onChange={(e) => updateProfile(profile.uid, "timeout", e.target.value)}
 										min="1"
 										className="mt-1"
 									/>
@@ -1672,20 +1792,13 @@ function AcpSection({ settings, isLoading }: GlobalSettingsSectionProps) {
 									<span className="text-tiny font-medium text-ink-dull">Environment (KEY=VALUE, one per line)</span>
 									<textarea
 										value={profile.env}
-										onChange={(e) => updateProfile(id, "env", e.target.value)}
+										onChange={(e) => updateProfile(profile.uid, "env", e.target.value)}
 										placeholder={"ANTHROPIC_API_KEY=sk-..."}
 										rows={2}
 										className="mt-1 w-full rounded-md border border-app-line bg-app-input px-3 py-2 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none"
 									/>
 								</label>
 
-								<Button
-									onClick={() => handleSaveProfile(id)}
-									loading={updateMutation.isPending}
-									className="self-start"
-								>
-									Save {id}
-								</Button>
 							</div>
 						</div>
 					))}
@@ -1698,7 +1811,7 @@ function AcpSection({ settings, isLoading }: GlobalSettingsSectionProps) {
 								type="text"
 								value={newId}
 								onChange={(e) => setNewId(e.target.value)}
-								placeholder="claude-code"
+								placeholder="opencode"
 								className="flex-1"
 								onKeyDown={(e) => e.key === "Enter" && handleAddProfile()}
 							/>
@@ -1707,6 +1820,10 @@ function AcpSection({ settings, isLoading }: GlobalSettingsSectionProps) {
 							</Button>
 						</div>
 					</div>
+
+					<Button onClick={handleSaveAllProfiles} loading={updateMutation.isPending}>
+						Save Changes
+					</Button>
 				</div>
 			)}
 
