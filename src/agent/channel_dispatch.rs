@@ -730,6 +730,169 @@ async fn spawn_opencode_worker_inner(
     Ok(worker_id)
 }
 
+/// Spawn an ACP-backed worker for coding tasks.
+///
+/// ACP workers communicate with any ACP-compatible coding agent CLI
+/// (Claude Code, Codex, Gemini CLI, etc.) via bidirectional JSON-RPC 2.0 over stdio.
+pub async fn spawn_acp_worker_from_state(
+    state: &ChannelState,
+    task: impl Into<String>,
+    directory: &str,
+    acp_id: &str,
+    interactive: bool,
+) -> std::result::Result<crate::WorkerId, AgentError> {
+    check_worker_limit(state).await?;
+    let task = task.into();
+    reserve_task_if_unique(state, &task).await?;
+    ensure_dispatch_readiness(state, "acp_worker");
+
+    let result = spawn_acp_worker_inner(state, &task, directory, acp_id, interactive).await;
+
+    release_task_reservation(state, &task).await;
+
+    result
+}
+
+/// Inner implementation of ACP worker spawning.
+async fn spawn_acp_worker_inner(
+    state: &ChannelState,
+    task: &str,
+    directory: &str,
+    acp_id: &str,
+    interactive: bool,
+) -> std::result::Result<crate::WorkerId, AgentError> {
+    let directory = expand_tilde(directory);
+    let rc = &state.deps.runtime_config;
+
+    let acp_config = rc.acp.load();
+    let profile = acp_config
+        .get(acp_id)
+        .ok_or_else(|| {
+            AgentError::Other(anyhow::anyhow!("ACP profile '{acp_id}' not found in config"))
+        })?;
+
+    if !profile.enabled {
+        return Err(AgentError::Other(anyhow::anyhow!(
+            "ACP profile '{acp_id}' is disabled"
+        )));
+    }
+
+    let profile = profile.clone();
+    let prompt_engine = rc.prompts.load();
+    let temporal_context = TemporalContext::from_runtime(rc.as_ref());
+    let worker_task =
+        build_worker_task_with_temporal_context(task, &temporal_context, &prompt_engine)
+            .map_err(|error| AgentError::Other(anyhow::anyhow!("{error}")))?;
+
+    let secrets_store = state.deps.runtime_config.secrets.load().as_ref().clone();
+
+    let worker = if interactive {
+        let (worker, input_tx) = crate::acp::AcpWorker::new_interactive(
+            Some(state.channel_id.clone()),
+            state.deps.agent_id.clone(),
+            &worker_task,
+            directory.clone(),
+            profile,
+            state.deps.event_tx.clone(),
+        );
+        let worker_id = worker.id;
+        state
+            .worker_inputs
+            .write()
+            .await
+            .insert(worker_id, input_tx);
+        worker.with_sqlite_pool(state.deps.sqlite_pool.clone())
+    } else {
+        let worker = crate::acp::AcpWorker::new(
+            Some(state.channel_id.clone()),
+            state.deps.agent_id.clone(),
+            &worker_task,
+            directory.clone(),
+            profile,
+            state.deps.event_tx.clone(),
+        );
+        worker.with_sqlite_pool(state.deps.sqlite_pool.clone())
+    };
+
+    let worker_id = worker.id;
+
+    let worker_span = tracing::info_span!(
+        "worker.run",
+        worker_id = %worker_id,
+        channel_id = %state.channel_id,
+        worker_type = "acp",
+    );
+    let sqlite_pool = state.deps.sqlite_pool.clone();
+    let handle = spawn_worker_task(
+        worker_id,
+        state.deps.event_tx.clone(),
+        state.deps.agent_id.clone(),
+        Some(state.channel_id.clone()),
+        secrets_store,
+        "acp",
+        async move {
+            let result = worker.run().await.map_err(SpacebotError::from)?;
+
+            // Persist the transcript.
+            if !result.transcript.is_empty() {
+                let blob =
+                    crate::conversation::worker_transcript::serialize_steps(&result.transcript);
+                let tool_calls = result.tool_calls;
+                let wid = worker_id.to_string();
+                let pool = sqlite_pool.clone();
+                tokio::spawn(async move {
+                    if let Err(error) = sqlx::query(
+                        "UPDATE worker_runs SET transcript = ?, tool_calls = ? WHERE id = ?",
+                    )
+                    .bind(&blob)
+                    .bind(tool_calls)
+                    .bind(&wid)
+                    .execute(&pool)
+                    .await
+                    {
+                        tracing::warn!(%error, worker_id = wid, "failed to persist ACP transcript");
+                    }
+                });
+            }
+
+            Ok::<String, SpacebotError>(result.result_text)
+        }
+        .instrument(worker_span),
+    );
+
+    state.worker_handles.write().await.insert(worker_id, handle);
+
+    let acp_task = format!("[acp:{acp_id}] {task}");
+    {
+        let mut status = state.status_block.write().await;
+        status.add_worker(worker_id, &acp_task, false, interactive);
+    }
+
+    state
+        .deps
+        .event_tx
+        .send(crate::ProcessEvent::WorkerStarted {
+            agent_id: state.deps.agent_id.clone(),
+            worker_id,
+            channel_id: Some(state.channel_id.clone()),
+            task: acp_task,
+            worker_type: "acp".into(),
+            interactive,
+            directory: Some(directory.to_string_lossy().to_string()),
+        })
+        .ok();
+
+    tracing::info!(
+        worker_id = %worker_id,
+        task = %task,
+        acp_id,
+        interactive,
+        "ACP worker spawned"
+    );
+
+    Ok(worker_id)
+}
+
 /// Spawn a future as a tokio task that sends a `WorkerComplete` event on completion.
 ///
 /// Handles both success and error cases, logging failures and sending the

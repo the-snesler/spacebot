@@ -288,6 +288,8 @@ pub(super) struct TomlDefaultsConfig {
     pub(super) cron_timezone: Option<String>,
     pub(super) user_timezone: Option<String>,
     pub(super) opencode: Option<TomlOpenCodeConfig>,
+    #[serde(default)]
+    pub(super) acp: HashMap<String, TomlAcpProfileConfig>,
     pub(super) worker_log_mode: Option<String>,
     pub(super) projects: Option<TomlProjectsConfig>,
 }
@@ -397,6 +399,27 @@ pub(super) struct TomlOpenCodePermissions {
     pub(super) edit: Option<String>,
     pub(super) bash: Option<String>,
     pub(super) webfetch: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub(super) struct TomlAcpProfileConfig {
+    #[serde(default = "default_acp_enabled")]
+    pub(super) enabled: bool,
+    pub(super) command: String,
+    #[serde(default)]
+    pub(super) args: Vec<String>,
+    #[serde(default)]
+    pub(super) env: HashMap<String, String>,
+    #[serde(default = "default_acp_timeout")]
+    pub(super) timeout: u64,
+}
+
+fn default_acp_enabled() -> bool {
+    true
+}
+
+fn default_acp_timeout() -> u64 {
+    300
 }
 
 #[derive(Deserialize)]

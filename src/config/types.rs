@@ -535,6 +535,7 @@ pub struct DefaultsConfig {
     pub history_backfill_count: usize,
     pub cron: Vec<CronDef>,
     pub opencode: OpenCodeConfig,
+    pub acp: std::collections::HashMap<String, AcpProfileConfig>,
     /// Worker log mode: "errors_only", "all_separate", or "all_combined".
     pub worker_log_mode: crate::settings::WorkerLogMode,
     /// Projects workspace management defaults.
@@ -824,6 +825,16 @@ impl Default for OpenCodeConfig {
             permissions: crate::opencode::OpenCodePermissions::default(),
         }
     }
+}
+
+/// ACP (Agent Client Protocol) worker profile configuration.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AcpProfileConfig {
+    pub enabled: bool,
+    pub command: String,
+    pub args: Vec<String>,
+    pub env: std::collections::HashMap<String, String>,
+    pub timeout: u64,
 }
 
 /// Cortex configuration.
@@ -1163,6 +1174,7 @@ impl Default for DefaultsConfig {
             history_backfill_count: 50,
             cron: Vec::new(),
             opencode: OpenCodeConfig::default(),
+            acp: std::collections::HashMap::new(),
             worker_log_mode: crate::settings::WorkerLogMode::default(),
             projects: ProjectsConfig::default(),
         }

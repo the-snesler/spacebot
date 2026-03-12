@@ -1,6 +1,6 @@
 import { createContext, useContext, useCallback, useRef, useState, useMemo, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, type AgentMessageEvent, type ChannelInfo, type ToolStartedEvent, type ToolCompletedEvent, type TranscriptStep, type OpenCodePart, type OpenCodePartUpdatedEvent, type WorkerTextEvent } from "@/api/client";
+import { api, type AgentMessageEvent, type AcpPartUpdatedEvent, type ChannelInfo, type ToolStartedEvent, type ToolCompletedEvent, type TranscriptStep, type OpenCodePart, type OpenCodePartUpdatedEvent, type WorkerTextEvent } from "@/api/client";
 import { generateId } from "@/lib/id";
 import { useEventSource, type ConnectionState } from "@/hooks/useEventSource";
 import { useChannelLiveState, type ChannelLiveState, type ActiveWorker } from "@/hooks/useChannelLiveState";
@@ -240,6 +240,44 @@ export function LiveContextProvider({ children }: { children: ReactNode }) {
 		bumpWorkerVersion();
 	}, [bumpWorkerVersion]);
 
+	// Handle ACP part updates — convert to transcript entries
+	const handleAcpPartUpdated = useCallback((data: unknown) => {
+		const event = data as AcpPartUpdatedEvent;
+		const { part } = event;
+
+		if (part.type === "text") {
+			setLiveTranscripts((prev) => {
+				const steps = prev[event.worker_id] ?? [];
+				const step: TranscriptStep = {
+					type: "action",
+					content: [{ type: "text", text: part.text }],
+				};
+				return { ...prev, [event.worker_id]: [...steps, step] };
+			});
+		} else if (part.type === "tool_started") {
+			setLiveTranscripts((prev) => {
+				const steps = prev[event.worker_id] ?? [];
+				const step: TranscriptStep = {
+					type: "action",
+					content: [{ type: "tool_call", id: part.id, name: part.name, args: "" }],
+				};
+				return { ...prev, [event.worker_id]: [...steps, step] };
+			});
+		} else if (part.type === "tool_completed") {
+			setLiveTranscripts((prev) => {
+				const steps = prev[event.worker_id] ?? [];
+				const step: TranscriptStep = {
+					type: "tool_result",
+					call_id: part.id,
+					name: part.name,
+					text: part.result,
+				};
+				return { ...prev, [event.worker_id]: [...steps, step] };
+			});
+		}
+		bumpWorkerVersion();
+	}, [bumpWorkerVersion]);
+
 	// Handle worker text — model reasoning text emitted between tool calls
 	const handleWorkerText = useCallback((data: unknown) => {
 		const event = data as WorkerTextEvent;
@@ -271,13 +309,14 @@ export function LiveContextProvider({ children }: { children: ReactNode }) {
 			tool_started: wrappedToolStarted,
 			tool_completed: wrappedToolCompleted,
 			opencode_part_updated: handleOpenCodePartUpdated,
+			acp_part_updated: handleAcpPartUpdated,
 			worker_text: handleWorkerText,
 			agent_message_sent: handleAgentMessage,
 			agent_message_received: handleAgentMessage,
 			task_updated: bumpTaskVersion,
 			cortex_chat_message: handleCortexChatMessage,
 		}),
-		[channelHandlers, wrappedWorkerStarted, wrappedWorkerStatus, wrappedWorkerIdle, wrappedWorkerCompleted, wrappedToolStarted, wrappedToolCompleted, handleOpenCodePartUpdated, handleWorkerText, handleAgentMessage, bumpTaskVersion, handleCortexChatMessage],
+		[channelHandlers, wrappedWorkerStarted, wrappedWorkerStatus, wrappedWorkerIdle, wrappedWorkerCompleted, wrappedToolStarted, wrappedToolCompleted, handleOpenCodePartUpdated, handleAcpPartUpdated, handleWorkerText, handleAgentMessage, bumpTaskVersion, handleCortexChatMessage],
 	);
 
 	const onReconnect = useCallback(() => {

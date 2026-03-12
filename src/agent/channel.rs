@@ -1442,12 +1442,21 @@ impl Channel {
         let browser_enabled = rc.browser_config.load().enabled;
         let web_search_enabled = rc.brave_search_key.load().is_some();
         let opencode_enabled = rc.opencode.load().enabled;
+        let acp_config = rc.acp.load();
+        let acp_enabled = acp_config.values().any(|p| p.enabled);
+        let acp_agents: Vec<String> = acp_config
+            .iter()
+            .filter(|(_, p)| p.enabled)
+            .map(|(id, _)| id.clone())
+            .collect();
         let sandbox_enabled = self.deps.sandbox.containment_active();
         let mcp_tool_names = self.deps.mcp_manager.get_tool_names().await;
         let worker_capabilities = prompt_engine.render_worker_capabilities(
             browser_enabled,
             web_search_enabled,
             opencode_enabled,
+            acp_enabled,
+            &acp_agents,
             &mcp_tool_names,
         )?;
 
@@ -2079,12 +2088,21 @@ impl Channel {
         let browser_enabled = rc.browser_config.load().enabled;
         let web_search_enabled = rc.brave_search_key.load().is_some();
         let opencode_enabled = rc.opencode.load().enabled;
+        let acp_config2 = rc.acp.load();
+        let acp_enabled2 = acp_config2.values().any(|p| p.enabled);
+        let acp_agents2: Vec<String> = acp_config2
+            .iter()
+            .filter(|(_, p)| p.enabled)
+            .map(|(id, _)| id.clone())
+            .collect();
         let sandbox_enabled = self.deps.sandbox.containment_active();
         let mcp_tool_names = self.deps.mcp_manager.get_tool_names().await;
         let worker_capabilities = prompt_engine.render_worker_capabilities(
             browser_enabled,
             web_search_enabled,
             opencode_enabled,
+            acp_enabled2,
+            &acp_agents2,
             &mcp_tool_names,
         )?;
 

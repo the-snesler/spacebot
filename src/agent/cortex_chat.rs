@@ -803,11 +803,20 @@ impl CortexChatSession {
         let browser_enabled = runtime_config.browser_config.load().enabled;
         let web_search_enabled = runtime_config.brave_search_key.load().is_some();
         let opencode_enabled = runtime_config.opencode.load().enabled;
+        let acp_config = runtime_config.acp.load();
+        let acp_enabled = acp_config.values().any(|p| p.enabled);
+        let acp_agents: Vec<String> = acp_config
+            .iter()
+            .filter(|(_, p)| p.enabled)
+            .map(|(id, _)| id.clone())
+            .collect();
         let mcp_tool_names = self.deps.mcp_manager.get_tool_names().await;
         let worker_capabilities = prompt_engine.render_worker_capabilities(
             browser_enabled,
             web_search_enabled,
             opencode_enabled,
+            acp_enabled,
+            &acp_agents,
             &mcp_tool_names,
         )?;
 

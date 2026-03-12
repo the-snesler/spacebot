@@ -146,6 +146,18 @@ export interface OpenCodePartUpdatedEvent {
 	part: OpenCodePart;
 }
 
+export type AcpPart =
+	| { type: "text"; text: string }
+	| { type: "thought"; text: string }
+	| { type: "tool_started"; id: string; name: string }
+	| { type: "tool_completed"; id: string; name: string; result: string };
+
+export interface AcpPartUpdatedEvent {
+	type: "acp_part_updated";
+	worker_id: string;
+	part: AcpPart;
+}
+
 export interface WorkerTextEvent {
 	type: "worker_text";
 	agent_id: string;
@@ -175,6 +187,7 @@ export type ApiEvent =
 	| ToolStartedEvent
 	| ToolCompletedEvent
 	| OpenCodePartUpdatedEvent
+	| AcpPartUpdatedEvent
 	| WorkerTextEvent
 	| CortexChatMessageEvent;
 

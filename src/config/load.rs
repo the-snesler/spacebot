@@ -1526,6 +1526,30 @@ impl Config {
                     }
                 })
                 .unwrap_or_else(|| base_defaults.opencode.clone()),
+            acp: toml
+                .defaults
+                .acp
+                .into_iter()
+                .map(|(id, profile)| {
+                    let resolved_env: HashMap<String, String> = profile
+                        .env
+                        .iter()
+                        .filter_map(|(k, v)| {
+                            resolve_env_value(v).map(|resolved| (k.clone(), resolved))
+                        })
+                        .collect();
+                    (
+                        id,
+                        crate::config::AcpProfileConfig {
+                            enabled: profile.enabled,
+                            command: profile.command,
+                            args: profile.args,
+                            env: resolved_env,
+                            timeout: profile.timeout,
+                        },
+                    )
+                })
+                .collect(),
             worker_log_mode: toml
                 .defaults
                 .worker_log_mode

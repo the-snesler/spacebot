@@ -209,6 +209,8 @@ impl PromptEngine {
         browser_enabled: bool,
         web_search_enabled: bool,
         opencode_enabled: bool,
+        acp_enabled: bool,
+        acp_agents: &[String],
         mcp_tool_names: &[String],
     ) -> Result<String> {
         self.render(
@@ -217,6 +219,8 @@ impl PromptEngine {
                 browser_enabled => browser_enabled,
                 web_search_enabled => web_search_enabled,
                 opencode_enabled => opencode_enabled,
+                acp_enabled => acp_enabled,
+                acp_agents => acp_agents,
                 mcp_tool_names => mcp_tool_names,
             },
         )

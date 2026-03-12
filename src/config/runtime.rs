@@ -55,6 +55,7 @@ pub struct RuntimeConfig {
     pub identity: ArcSwap<crate::identity::Identity>,
     pub skills: ArcSwap<crate::skills::SkillSet>,
     pub opencode: ArcSwap<OpenCodeConfig>,
+    pub acp: ArcSwap<std::collections::HashMap<String, super::AcpProfileConfig>>,
     /// Shared pool of OpenCode server processes. Lazily initialized on first use.
     pub opencode_server_pool: ArcSwap<crate::opencode::OpenCodeServerPool>,
     /// Cron store, set after agent initialization.
@@ -130,6 +131,7 @@ impl RuntimeConfig {
             identity: ArcSwap::from_pointee(identity),
             skills: ArcSwap::from_pointee(skills),
             opencode: ArcSwap::from_pointee(defaults.opencode.clone()),
+            acp: ArcSwap::from_pointee(defaults.acp.clone()),
             opencode_server_pool: ArcSwap::from_pointee(server_pool),
             cron_store: ArcSwap::from_pointee(None),
             cron_scheduler: ArcSwap::from_pointee(None),
@@ -291,6 +293,8 @@ impl RuntimeConfig {
         new_sandbox.project_paths = existing_project_paths;
         self.sandbox.store(Arc::new(new_sandbox));
         self.projects.store(Arc::new(resolved.projects.clone()));
+
+        self.acp.store(Arc::new(config.defaults.acp.clone()));
 
         let old_opencode = self.opencode.load().as_ref().clone();
         let new_opencode = config.defaults.opencode.clone();
