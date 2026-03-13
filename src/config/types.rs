@@ -2684,3 +2684,32 @@ impl std::fmt::Debug for MattermostInstanceConfig {
             .finish()
     }
 }
+
+
+#[cfg(test)]
+mod mattermost_url_tests {
+    use super::validate_mattermost_url;
+
+    #[test]
+    fn accepts_https_url() {
+        assert!(validate_mattermost_url("https://mattermost.example.com").is_ok());
+    }
+
+    #[test]
+    fn accepts_http_url_with_warning() {
+        // http is allowed (with a warning), not an error
+        assert!(validate_mattermost_url("http://mattermost.example.com").is_ok());
+    }
+
+    #[test]
+    fn rejects_invalid_scheme() {
+        assert!(validate_mattermost_url("ftp://mattermost.example.com").is_err());
+        assert!(validate_mattermost_url("ws://mattermost.example.com").is_err());
+    }
+
+    #[test]
+    fn rejects_unparseable_url() {
+        assert!(validate_mattermost_url("not a url at all").is_err());
+        assert!(validate_mattermost_url("").is_err());
+    }
+}

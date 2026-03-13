@@ -836,6 +836,16 @@ fn build_message_from_post(
         }
     }
 
+    // DM filter: if channel_type is "D", enforce dm_allowed_users (fail-closed)
+    if post.channel_type.as_deref() == Some("D") {
+        if permissions.dm_allowed_users.is_empty() {
+            return None;
+        }
+        if !permissions.dm_allowed_users.contains(&post.user_id) {
+            return None;
+        }
+    }
+
     // "D" = direct message, "G" = group DM
     let conversation_id = if post.channel_type.as_deref() == Some("D") {
         apply_runtime_adapter_to_conversation_id(
@@ -995,6 +1005,163 @@ fn split_message(text: &str, max_len: usize) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // --- helpers ---
+
+    fn post(user_id: &str, channel_id: &str, channel_type: Option<&str>) -> MattermostPost {
+        MattermostPost {
+            id: "post1".into(),
+            create_at: 0,
+            update_at: 0,
+            user_id: user_id.into(),
+            channel_id: channel_id.into(),
+            root_id: String::new(),
+            message: "hello".into(),
+            channel_type: channel_type.map(String::from),
+            file_ids: vec![],
+        }
+    }
+
+    fn no_filters() -> MattermostPermissions {
+        MattermostPermissions {
+            team_filter: None,
+            channel_filter: HashMap::new(),
+            dm_allowed_users: vec![],
+        }
+    }
+
+    // --- build_message_from_post ---
+
+    #[test]
+    fn bot_messages_are_filtered() {
+        let p = post("bot123", "chan1", None);
+        assert!(build_message_from_post(&p, "mattermost", "bot123", &None, &no_filters()).is_none());
+    }
+
+    #[test]
+    fn non_bot_message_passes_without_filters() {
+        let p = post("user1", "chan1", None);
+        assert!(build_message_from_post(&p, "mattermost", "bot123", &Some("team1".into()), &no_filters()).is_some());
+    }
+
+    #[test]
+    fn team_filter_allows_matching_team() {
+        let p = post("user1", "chan1", None);
+        let perms = MattermostPermissions {
+            team_filter: Some(vec!["team1".into()]),
+            channel_filter: HashMap::new(),
+            dm_allowed_users: vec![],
+        };
+        assert!(build_message_from_post(&p, "mattermost", "bot", &Some("team1".into()), &perms).is_some());
+    }
+
+    #[test]
+    fn team_filter_rejects_wrong_team() {
+        let p = post("user1", "chan1", None);
+        let perms = MattermostPermissions {
+            team_filter: Some(vec!["team1".into()]),
+            channel_filter: HashMap::new(),
+            dm_allowed_users: vec![],
+        };
+        assert!(build_message_from_post(&p, "mattermost", "bot", &Some("team2".into()), &perms).is_none());
+    }
+
+    #[test]
+    fn team_filter_fail_closed_when_team_id_absent() {
+        let p = post("user1", "chan1", None);
+        let perms = MattermostPermissions {
+            team_filter: Some(vec!["team1".into()]),
+            channel_filter: HashMap::new(),
+            dm_allowed_users: vec![],
+        };
+        // No team_id in the event — must reject (fail-closed)
+        assert!(build_message_from_post(&p, "mattermost", "bot", &None, &perms).is_none());
+    }
+
+    #[test]
+    fn channel_filter_allows_matching_channel() {
+        let p = post("user1", "chan1", None);
+        let mut cf = HashMap::new();
+        cf.insert("team1".into(), vec!["chan1".into()]);
+        let perms = MattermostPermissions { team_filter: None, channel_filter: cf, dm_allowed_users: vec![] };
+        assert!(build_message_from_post(&p, "mattermost", "bot", &Some("team1".into()), &perms).is_some());
+    }
+
+    #[test]
+    fn channel_filter_rejects_unlisted_channel() {
+        let p = post("user1", "chan2", None);
+        let mut cf = HashMap::new();
+        cf.insert("team1".into(), vec!["chan1".into()]);
+        let perms = MattermostPermissions { team_filter: None, channel_filter: cf, dm_allowed_users: vec![] };
+        assert!(build_message_from_post(&p, "mattermost", "bot", &Some("team1".into()), &perms).is_none());
+    }
+
+    #[test]
+    fn channel_filter_fail_closed_when_team_id_absent() {
+        let p = post("user1", "chan1", None);
+        let mut cf = HashMap::new();
+        cf.insert("team1".into(), vec!["chan1".into()]);
+        let perms = MattermostPermissions { team_filter: None, channel_filter: cf, dm_allowed_users: vec![] };
+        // No team_id → can't look up allowed channels → reject
+        assert!(build_message_from_post(&p, "mattermost", "bot", &None, &perms).is_none());
+    }
+
+    fn dm_perms(allowed: &[&str]) -> MattermostPermissions {
+        MattermostPermissions {
+            team_filter: None,
+            channel_filter: HashMap::new(),
+            dm_allowed_users: allowed.iter().map(|s| s.to_string()).collect(),
+        }
+    }
+
+    #[test]
+    fn dm_blocked_when_dm_allowed_users_empty() {
+        let p = post("user1", "chan1", Some("D"));
+        assert!(build_message_from_post(&p, "mattermost", "bot", &Some("team1".into()), &no_filters()).is_none());
+    }
+
+    #[test]
+    fn dm_allowed_for_listed_user() {
+        let p = post("user1", "chan1", Some("D"));
+        assert!(build_message_from_post(&p, "mattermost", "bot", &Some("team1".into()), &dm_perms(&["user1"])).is_some());
+    }
+
+    #[test]
+    fn dm_blocked_for_unlisted_user() {
+        let p = post("user2", "chan1", Some("D"));
+        assert!(build_message_from_post(&p, "mattermost", "bot", &Some("team1".into()), &dm_perms(&["user1"])).is_none());
+    }
+
+    #[test]
+    fn dm_filter_does_not_affect_channel_messages() {
+        // channel messages (type "O") pass even with empty dm_allowed_users
+        let p = post("user1", "chan1", Some("O"));
+        assert!(build_message_from_post(&p, "mattermost", "bot", &Some("team1".into()), &no_filters()).is_some());
+    }
+
+    #[test]
+    fn dm_conversation_id_uses_user_id() {
+        let p = post("user1", "chan1", Some("D"));
+        let msg = build_message_from_post(&p, "mattermost", "bot", &Some("team1".into()), &dm_perms(&["user1"])).unwrap();
+        assert!(msg.conversation_id.contains(":dm:user1"), "expected DM conversation_id, got {}", msg.conversation_id);
+    }
+
+    #[test]
+    fn channel_conversation_id_uses_channel_id() {
+        let p = post("user1", "chan1", Some("O"));
+        let msg = build_message_from_post(&p, "mattermost", "bot", &Some("team1".into()), &no_filters()).unwrap();
+        assert!(msg.conversation_id.contains(":chan1"), "expected channel conversation_id, got {}", msg.conversation_id);
+        assert!(!msg.conversation_id.contains(":dm:"), "should not be DM, got {}", msg.conversation_id);
+    }
+
+    #[test]
+    fn message_id_metadata_is_set() {
+        let p = post("user1", "chan1", None);
+        let msg = build_message_from_post(&p, "mattermost", "bot", &Some("team1".into()), &no_filters()).unwrap();
+        assert!(msg.metadata.contains_key(crate::metadata_keys::MESSAGE_ID));
+    }
+
+    // --- split_message ---
 
     #[test]
     fn test_split_message_short() {
