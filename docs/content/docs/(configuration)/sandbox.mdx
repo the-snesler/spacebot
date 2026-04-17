@@ -173,14 +173,16 @@ Detection also covers encoded forms -- secrets wrapped in base64, URL encoding, 
 
 If a channel egress leak is detected, outbound text is blocked. The raw leaked value is never logged -- only the detection event and a truncated non-reversible fingerprint are recorded for debugging.
 
-### OpenCode Workers
+### Code Workers
 
-OpenCode workers (external coding agent processes) apply the same output scrubbing, and also scan SSE text/tool output for secret patterns for observability:
+OpenCode workers and ACP workers apply the same output scrubbing, and external worker output is also scanned for secret patterns for observability:
 
 1. **Output scrubbing** (exact-match redaction of known secret values) -- runs first
 2. **Leak-pattern scan** (regex pattern matching for unknown secrets) -- runs second
 
 The ordering ensures that stored tool secrets are redacted before pattern scanning runs, so expected secret values in worker output don't trigger false positives.
+
+ACP profile `command` and `env` values also go through Spacebot's config resolution, so `env:VAR_NAME` and `secret:NAME` references are expanded before the subprocess launches.
 
 ## Dynamic Mode Switching
 

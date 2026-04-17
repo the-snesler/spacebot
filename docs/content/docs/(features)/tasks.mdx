@@ -126,6 +126,16 @@ Arbitrary key-value pairs stored as a JSON object. Used for linking to external 
 }
 ```
 
+ACP-backed tasks use the same metadata shape, with `worker_type: "acp"` and an ACP profile id when needed:
+
+```json
+{
+  "worker_type": "acp",
+  "acp_profile_id": "claude",
+  "estimated_effort": "medium"
+}
+```
+
 No enforced schema. The UI renders known keys with special formatting (e.g., GitHub links become clickable) and displays unknown keys as plain key-value pairs.
 
 ## Task Numbering

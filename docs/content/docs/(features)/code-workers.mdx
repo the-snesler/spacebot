@@ -1,0 +1,165 @@
+---
+title: Code Workers
+description: Delegate coding work to specialized worker agents — OpenCode or any ACP-compatible agent.
+---
+
+# Code Workers
+
+Spacebot can delegate coding tasks to dedicated worker backends instead of using the built-in Rig worker loop. There are two flavors:
+
+- **OpenCode workers** — long-running HTTP + SSE sessions backed by the OpenCode server pool
+- **ACP workers** — one subprocess per worker using the Agent Client Protocol over stdio
+
+Use code workers for multi-file edits, codebase exploration, debugging, and longer implementation tasks. Use builtin workers for one-shot shell commands, quick file reads, and small non-coding tasks.
+
+## Choosing an approach
+
+| | OpenCode | ACP |
+|---|---|---|
+| **Transport** | Local HTTP + SSE | Stdio NDJSON JSON-RPC |
+| **Lifecycle** | Reuses per-directory server pool | One subprocess per worker |
+| **Restart behavior** | Can reattach after restart | No cross-restart resume |
+| **UI** | Can embed the OpenCode web UI | Transcript view in Workers tab |
+| **Best for** | OpenCode-native workflows and session reuse | Any ACP-compatible binary such as `claude acp` or `opencode acp` |
+
+## OpenCode Workers
+
+OpenCode workers delegate to a persistent OpenCode subprocess with its own coding tool suite, context management, and optional embedded UI.
+
+### Enabling
+
+```toml
+[defaults.opencode]
+enabled = true
+path = "opencode"
+```
+
+The `path` field supports `env:VAR_NAME` resolution:
+
+```toml
+path = "env:OPENCODE_PATH"
+```
+
+Once enabled, the `spawn_worker` tool gains `worker_type: "opencode"`. The channel LLM decides when to use it.
+
+### Server pool
+
+OpenCode runs as `opencode serve --port <port>` with one managed server per working directory.
+
+- Deterministic ports let Spacebot reconnect to the same directory after restart.
+- `max_servers` limits concurrent OpenCode servers.
+- `max_restart_retries` controls automatic restarts when a server dies.
+
+### Permissions
+
+OpenCode permissions are configured in Spacebot and passed through `OPENCODE_CONFIG_CONTENT`:
+
+```toml
+[defaults.opencode.permissions]
+edit = "allow"
+bash = "allow"
+webfetch = "allow"
+```
+
+### Full configuration
+
+```toml
+[defaults.opencode]
+enabled = true
+path = "opencode"
+max_servers = 5
+server_startup_timeout_secs = 30
+max_restart_retries = 5
+
+[defaults.opencode.permissions]
+edit = "allow"
+bash = "allow"
+webfetch = "allow"
+```
+
+### Embedded UI
+
+When you open an OpenCode worker in the Workers tab, Spacebot can embed the OpenCode interface inline. If the embed bundle is not built, the worker still works and the UI falls back to the transcript view.
+
+## ACP Workers
+
+ACP workers launch an external coding agent as a subprocess and speak the Agent Client Protocol over stdin/stdout. This is useful when you want Spacebot to delegate to a binary that already implements ACP.
+
+### Enabling
+
+```toml
+[defaults.acp]
+enabled = true
+
+[[defaults.acp.profiles]]
+id = "claude"
+display_name = "Claude Code"
+command = "claude"
+args = ["acp"]
+env = { ANTHROPIC_API_KEY = "secret:anthropic_api_key" }
+
+[[defaults.acp.profiles]]
+id = "opencode-acp"
+display_name = "OpenCode ACP"
+command = "opencode"
+args = ["acp"]
+```
+
+Each profile defines one ACP-capable subprocess template:
+
+- `id` — the value the LLM uses as `acp_profile_id`
+- `display_name` — optional label shown in prompts and settings
+- `command` / `args` — executable and arguments
+- `env` — extra environment variables for that profile
+
+`command` and `env` values support the same `env:VAR_NAME` and `secret:NAME` resolution used elsewhere in the config loader.
+
+### How the LLM selects ACP
+
+When ACP is enabled and at least one profile exists, the `spawn_worker` tool can use:
+
+```json
+{
+  "worker_type": "acp",
+  "acp_profile_id": "claude",
+  "directory": "/code/myapp",
+  "task": "Implement the OAuth callback flow"
+}
+```
+
+The profile id is constrained to configured values, so the model can only choose a valid ACP target.
+
+### Protocol flow
+
+At a high level, Spacebot drives ACP like this:
+
+1. Spawn the configured subprocess in the requested working directory
+2. Run `initialize`
+3. Open a new ACP session
+4. Send prompts with `session/prompt`
+5. Stream `session/update` notifications into the worker transcript UI
+6. Handle `stopReason` to mark the worker idle, complete, refused, or cancelled
+
+### Permissions and transcript view
+
+ACP permission requests are surfaced as worker permission events and ACP session updates are rendered live in the Workers tab. Tool calls, tool output, plans, assistant text, and step boundaries all appear in the live transcript view while the worker is running.
+
+### Lifecycle limits
+
+- ACP workers are interactive and accept follow-up input while idle.
+- Each ACP worker owns its subprocess; there is no shared server pool.
+- Idle ACP workers do not resume across restart. After restart, Spacebot marks them failed with a message telling you to spawn a new worker.
+- Cancellation sends `session/cancel` first, then falls back to task abort if the subprocess does not stop promptly.
+
+## Architecture summary
+
+```text
+Channel/Branch
+  -> spawn_worker(...)
+  -> builtin | opencode | acp
+
+OpenCode: Spacebot <-> HTTP/SSE <-> opencode serve
+ACP:      Spacebot <-> stdio JSON-RPC <-> external ACP subprocess
+```
+
+Both flavors integrate with the same worker list, transcript persistence, status updates, and cancellation flow in Spacebot.
