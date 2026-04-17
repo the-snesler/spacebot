@@ -184,8 +184,24 @@ fn build_channel_system_prompt(rc: &spacebot::config::RuntimeConfig) -> String {
     let browser_enabled = rc.browser_config.load().enabled;
     let web_search_enabled = rc.brave_search_key.load().is_some();
     let opencode_enabled = rc.opencode.load().enabled;
+    let acp_profiles = rc
+        .acp
+        .load()
+        .profiles
+        .iter()
+        .map(|profile| spacebot::acp::AcpProfileInfo {
+            id: profile.id.clone(),
+            display_name: profile.display_name.clone(),
+        })
+        .collect::<Vec<_>>();
     let worker_capabilities = prompt_engine
-        .render_worker_capabilities(browser_enabled, web_search_enabled, opencode_enabled, &[])
+        .render_worker_capabilities(
+            browser_enabled,
+            web_search_enabled,
+            opencode_enabled,
+            &acp_profiles,
+            &[],
+        )
         .expect("failed to render worker capabilities");
 
     let conversation_context = prompt_engine
@@ -238,6 +254,7 @@ async fn dump_channel_context() {
         worker_handles: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
         active_workers: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
         worker_inputs: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
+        acp_worker_inputs: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
         worker_injections: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
         reserved_tasks: Arc::new(tokio::sync::RwLock::new(std::collections::HashSet::new())),
         status_block,
@@ -492,6 +509,7 @@ async fn dump_all_contexts() {
         worker_handles: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
         active_workers: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
         worker_inputs: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
+        acp_worker_inputs: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
         worker_injections: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
         reserved_tasks: Arc::new(tokio::sync::RwLock::new(std::collections::HashSet::new())),
         status_block: Arc::new(tokio::sync::RwLock::new(
