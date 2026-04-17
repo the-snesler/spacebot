@@ -103,6 +103,10 @@ pub enum AcpUpdate {
         id: String,
         text: String,
     },
+    AgentThought {
+        id: String,
+        text: String,
+    },
     UserMessage {
         id: String,
         text: String,
@@ -138,7 +142,7 @@ impl AcpUpdate {
                 id: "user".into(),
                 text: content_block_text(&chunk.content),
             }),
-            acp::SessionUpdate::AgentThoughtChunk(chunk) => Some(Self::AgentMessage {
+            acp::SessionUpdate::AgentThoughtChunk(chunk) => Some(Self::AgentThought {
                 id: "thought".into(),
                 text: content_block_text(&chunk.content),
             }),

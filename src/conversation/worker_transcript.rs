@@ -324,14 +324,12 @@ pub fn convert_acp_updates(updates: &[crate::acp::AcpUpdate]) -> (Vec<Transcript
                 if text.is_empty() {
                     continue;
                 }
-                if !all_text.is_empty() {
-                    all_text.push_str("\n\n");
-                }
                 all_text.push_str(text);
                 steps.push(TranscriptStep::Action {
                     content: vec![ActionContent::Text { text: text.clone() }],
                 });
             }
+            crate::acp::AcpUpdate::AgentThought { .. } => {}
             crate::acp::AcpUpdate::UserMessage { text, .. } => {
                 if !text.is_empty() {
                     steps.push(TranscriptStep::UserText { text: text.clone() });

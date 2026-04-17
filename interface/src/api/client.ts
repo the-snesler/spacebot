@@ -252,6 +252,7 @@ export interface AcpPlanEntry {
 
 export type AcpUpdate =
 	| { type: "agent_message"; id: string; text: string }
+	| { type: "agent_thought"; id: string; text: string }
 	| { type: "user_message"; id: string; text: string }
 	| {
 			type: "tool_call";

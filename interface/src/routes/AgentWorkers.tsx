@@ -666,6 +666,14 @@ export function WorkerDetail({
 }
 
 function AcpUpdateView({update}: {update: AcpUpdate}) {
+	if (update.type === "agent_thought") {
+		return (
+			<div className="text-xs italic text-ink-faint">
+				<Markdown>{stripExcessWhitespace(update.text)}</Markdown>
+			</div>
+		);
+	}
+
 	if (update.type === "agent_message" || update.type === "user_message") {
 		return (
 			<div className="text-xs text-ink-dull">

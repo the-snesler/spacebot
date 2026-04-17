@@ -126,9 +126,6 @@ impl AcpWorker {
                         }
                         crate::acp::AcpEvt::SessionUpdate { update } => {
                             if let Some(text) = update.agent_text() {
-                                if !prompt_result.is_empty() && !text.is_empty() {
-                                    prompt_result.push_str("\n\n");
-                                }
                                 prompt_result.push_str(text);
                             }
                             updates.push(update.clone());
