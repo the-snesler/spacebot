@@ -8,7 +8,7 @@ export type SectionId =
 	| "api-keys"
 	| "secrets"
 	| "server"
-	| "opencode"
+	| "code-workers"
 	| "worker-logs"
 	| "updates"
 	| "config-file"

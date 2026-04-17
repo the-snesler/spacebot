@@ -5,6 +5,7 @@ import {motion} from "framer-motion";
 import {Markdown} from "@/components/Markdown";
 import {
 	api,
+	type AcpUpdate,
 	type WorkerRunInfo,
 	type WorkerDetailResponse,
 	type TranscriptStep,
@@ -49,6 +50,12 @@ function durationBetween(start: string, end: string | null): string {
 	return formatDuration(seconds);
 }
 
+function stripWorkerTaskPrefix(text: string): string {
+	return text
+		.replace(/^\[opencode]\s*/, "")
+		.replace(/^\[acp:[\w-]+\]\s*/, "");
+}
+
 export function AgentWorkers({agentId}: {agentId: string}) {
 	const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 	const [search, setSearch] = useState("");
@@ -61,6 +68,7 @@ export function AgentWorkers({agentId}: {agentId: string}) {
 		workerEventVersion,
 		liveTranscripts,
 		liveOpenCodeParts,
+		liveAcpUpdates,
 	} = useLiveContext();
 
 	// Invalidate worker queries when SSE events fire
@@ -268,6 +276,7 @@ export function AgentWorkers({agentId}: {agentId: string}) {
 						liveWorker={scopedActiveWorkers[selectedWorkerId]}
 						liveTranscript={liveTranscripts[selectedWorkerId]}
 						liveOpenCodeParts={liveOpenCodeParts[selectedWorkerId]}
+						liveAcpUpdates={liveAcpUpdates[selectedWorkerId]}
 					/>
 				) : (
 					<div className="flex flex-1 items-center justify-center">
@@ -329,7 +338,7 @@ function WorkerCard({
 						selected ? "text-ink" : "text-ink-dull",
 					)}
 				>
-					{worker.task.replace(/^\[opencode]\s*/, "")}
+					{stripWorkerTaskPrefix(worker.task)}
 				</p>
 				<div className="flex shrink-0 items-center gap-1.5 pointer-events-none">
 					{worker.worker_type === "opencode" ? (
@@ -383,11 +392,13 @@ export function WorkerDetail({
 	liveWorker,
 	liveTranscript,
 	liveOpenCodeParts,
+	liveAcpUpdates,
 }: {
 	detail: WorkerDetailResponse;
 	liveWorker?: LiveWorker;
 	liveTranscript?: TranscriptStep[];
 	liveOpenCodeParts?: Map<string, OpenCodePart>;
+	liveAcpUpdates?: AcpUpdate[];
 }) {
 	const isLive = detail.status === "running" || !!liveWorker;
 	const isIdle = liveWorker?.isIdle ?? detail.status === "idle";
@@ -400,6 +411,7 @@ export function WorkerDetail({
 	const toolCalls = liveWorker?.toolCalls ?? detail.tool_calls ?? 0;
 
 	const isOpenCode = detail.worker_type === "opencode";
+	const isAcp = detail.worker_type === "acp";
 	const hasOpenCodeEmbed =
 		isOpenCode &&
 		detail.opencode_port != null &&
@@ -585,6 +597,29 @@ export function WorkerDetail({
 								)}
 							</div>
 						</div>
+					) : isAcp && isLive && liveAcpUpdates && liveAcpUpdates.length > 0 ? (
+						<div className="px-6 py-4">
+							<h3 className="mb-3 text-tiny font-medium uppercase tracking-wider text-ink-faint">
+								{isIdle ? "Transcript" : "Live Transcript"}
+							</h3>
+							<div className="flex flex-col gap-3">
+								{liveAcpUpdates.map((update, index) => (
+									<motion.div
+										key={`${update.type}-${index}`}
+										initial={{opacity: 0, y: 6}}
+										animate={{opacity: 1, y: 0}}
+										transition={{duration: 0.2, ease: "easeOut"}}
+									>
+										<AcpUpdateView update={update} />
+									</motion.div>
+								))}
+								{isIdle && (
+									<div className="flex items-center gap-2 py-2 text-tiny text-blue-500">
+										Waiting for follow-up input...
+									</div>
+								)}
+							</div>
+						</div>
 					) : transcript && transcript.length > 0 ? (
 						<div className="px-6 py-4">
 							<h3 className="mb-3 text-tiny font-medium uppercase tracking-wider text-ink-faint">
@@ -626,6 +661,72 @@ export function WorkerDetail({
 					)}
 				</div>
 			)}
+		</div>
+	);
+}
+
+function AcpUpdateView({update}: {update: AcpUpdate}) {
+	if (update.type === "agent_message" || update.type === "user_message") {
+		return (
+			<div className="text-xs text-ink-dull">
+				<Markdown>{stripExcessWhitespace(update.text)}</Markdown>
+			</div>
+		);
+	}
+
+	if (update.type === "tool_call") {
+		return (
+			<div className="rounded-lg border border-app-line/50 bg-app-dark-box/20 p-3">
+				<div className="text-xs font-medium text-ink">{update.title}</div>
+				<div className="mt-1 text-tiny text-ink-faint">{update.name}</div>
+				{update.input && (
+					<pre className="mt-2 overflow-x-auto rounded bg-app-dark-box/40 p-2 text-[11px] text-ink-dull">
+						{update.input}
+					</pre>
+				)}
+			</div>
+		);
+	}
+
+	if (update.type === "tool_call_update") {
+		return (
+			<div className="rounded-lg border border-app-line/50 bg-app-dark-box/20 p-3">
+				<div className="text-xs font-medium capitalize text-ink">
+					Tool {update.status.replaceAll("_", " ")}
+				</div>
+				{update.output && (
+					<pre className="mt-2 overflow-x-auto rounded bg-app-dark-box/40 p-2 text-[11px] text-ink-dull">
+						{update.output}
+					</pre>
+				)}
+				{update.error && (
+					<pre className="mt-2 overflow-x-auto rounded bg-red-500/10 p-2 text-[11px] text-red-200">
+						{update.error}
+					</pre>
+				)}
+			</div>
+		);
+	}
+
+	if (update.type === "plan") {
+		return (
+			<div className="rounded-lg border border-app-line/50 bg-app-dark-box/20 p-3">
+				<div className="mb-2 text-xs font-medium text-ink">Plan</div>
+				<div className="flex flex-col gap-2">
+					{update.entries.map((entry, index) => (
+						<div key={`${entry.content}-${index}`} className="text-xs text-ink-dull">
+							<span className="mr-2 text-ink-faint">{entry.status}</span>
+							{entry.content}
+						</div>
+					))}
+				</div>
+			</div>
+		);
+	}
+
+	return (
+		<div className="text-tiny uppercase tracking-wider text-ink-faint">
+			Step finished: {update.stop_reason.replaceAll("_", " ")}
 		</div>
 	);
 }
@@ -704,12 +805,12 @@ function TaskText({text}: {text: string}) {
 			onMouseLeave={() => setHovered(false)}
 		>
 			<p ref={textRef} className="truncate text-sm font-medium text-ink-dull">
-				{text}
+				{stripWorkerTaskPrefix(text)}
 			</p>
 			{hovered && (
 				<div className="absolute left-0 top-full z-50 mt-1 max-h-60 max-w-lg overflow-y-auto rounded-lg border border-app-line/50 bg-app-box/95 px-4 py-3 shadow-xl backdrop-blur-sm">
 					<p className="whitespace-pre-wrap break-words text-sm text-ink-dull">
-						{text}
+						{stripWorkerTaskPrefix(text)}
 					</p>
 				</div>
 			)}

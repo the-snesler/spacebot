@@ -1,6 +1,6 @@
 import { createContext, useContext, useCallback, useEffect, useRef, useState, useMemo, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, type AgentMessageEvent, type ChannelInfo, type ToolStartedEvent, type ToolCompletedEvent, type TranscriptStep, type OpenCodePart, type OpenCodePartUpdatedEvent, type WorkerTextEvent } from "@/api/client";
+import { api, type AgentMessageEvent, type ChannelInfo, type ToolStartedEvent, type ToolCompletedEvent, type TranscriptStep, type OpenCodePart, type OpenCodePartUpdatedEvent, type WorkerTextEvent, type AcpUpdate, type AcpUpdateReceivedEvent } from "@/api/client";
 import { generateId } from "@/lib/id";
 import { useEventSource, type ConnectionState } from "@/hooks/useEventSource";
 import { useChannelLiveState, type ChannelLiveState, type ActiveWorker } from "@/hooks/useChannelLiveState";
@@ -25,6 +25,8 @@ interface LiveContextValue {
 	liveTranscripts: Record<string, TranscriptStep[]>;
 	/** Live OpenCode parts for running workers, keyed by worker_id. Parts are insertion-ordered Maps keyed by part ID. */
 	liveOpenCodeParts: Record<string, Map<string, OpenCodePart>>;
+	/** Live ACP updates for running workers, keyed by worker_id. */
+	liveAcpUpdates: Record<string, AcpUpdate[]>;
 }
 
 const LiveContext = createContext<LiveContextValue>({
@@ -39,6 +41,7 @@ const LiveContext = createContext<LiveContextValue>({
 	taskEventVersion: 0,
 	liveTranscripts: {},
 	liveOpenCodeParts: {},
+	liveAcpUpdates: {},
 });
 
 export function useLiveContext() {
@@ -76,6 +79,7 @@ export function LiveContextProvider({ children, onBootstrapped }: { children: Re
 	// Live OpenCode parts: per-worker insertion-ordered Map keyed by part ID.
 	// Updated via opencode_part_updated SSE events. Cleared when worker completes.
 	const [liveOpenCodeParts, setLiveOpenCodeParts] = useState<Record<string, Map<string, OpenCodePart>>>({});
+	const [liveAcpUpdates, setLiveAcpUpdates] = useState<Record<string, AcpUpdate[]>>({});
 
 	// Derive flat active workers from channel live states
 	const pendingToolCallIdsRef = useRef<Record<string, Record<string, string[]>>>({});
@@ -143,6 +147,7 @@ export function LiveContextProvider({ children, onBootstrapped }: { children: Re
 		const event = data as { worker_id: string };
 		setLiveTranscripts((prev) => ({ ...prev, [event.worker_id]: [] }));
 		setLiveOpenCodeParts((prev) => ({ ...prev, [event.worker_id]: new Map() }));
+		setLiveAcpUpdates((prev) => ({ ...prev, [event.worker_id]: [] }));
 		delete pendingToolCallIdsRef.current[event.worker_id];
 		bumpWorkerVersion();
 	}, [channelHandlers, bumpWorkerVersion]);
@@ -166,6 +171,11 @@ export function LiveContextProvider({ children, onBootstrapped }: { children: Re
 		delete pendingToolCallIdsRef.current[event.worker_id];
 		// Clean up live OpenCode parts — persisted transcript takes over
 		setLiveOpenCodeParts((prev) => {
+			const next = { ...prev };
+			delete next[event.worker_id];
+			return next;
+		});
+		setLiveAcpUpdates((prev) => {
 			const next = { ...prev };
 			delete next[event.worker_id];
 			return next;
@@ -256,6 +266,15 @@ export function LiveContextProvider({ children, onBootstrapped }: { children: Re
 		bumpWorkerVersion();
 	}, [bumpWorkerVersion]);
 
+	const handleAcpUpdateReceived = useCallback((data: unknown) => {
+		const event = data as AcpUpdateReceivedEvent;
+		setLiveAcpUpdates((prev) => {
+			const updates = prev[event.worker_id] ?? [];
+			return { ...prev, [event.worker_id]: [...updates, event.update] };
+		});
+		bumpWorkerVersion();
+	}, [bumpWorkerVersion]);
+
 	const handleCortexChatMessage = useCallback((data: unknown) => {
 		// Forward cortex chat auto-triggered messages to any listening useCortexChat hooks
 		// via a DOM custom event. This avoids coupling useLiveContext to cortex chat state.
@@ -281,6 +300,7 @@ export function LiveContextProvider({ children, onBootstrapped }: { children: Re
 			tool_started: wrappedToolStarted,
 			tool_completed: wrappedToolCompleted,
 			opencode_part_updated: handleOpenCodePartUpdated,
+			acp_update_received: handleAcpUpdateReceived,
 			worker_text: handleWorkerText,
 			agent_message_sent: handleAgentMessage,
 			agent_message_received: handleAgentMessage,
@@ -289,7 +309,7 @@ export function LiveContextProvider({ children, onBootstrapped }: { children: Re
 			notification_created: handleNotificationCreated,
 			notification_updated: handleNotificationUpdated,
 		}),
-		[channelHandlers, wrappedWorkerStarted, wrappedWorkerStatus, wrappedWorkerIdle, wrappedWorkerCompleted, wrappedToolStarted, wrappedToolCompleted, handleOpenCodePartUpdated, handleWorkerText, handleAgentMessage, bumpTaskVersion, handleCortexChatMessage, handleNotificationCreated, handleNotificationUpdated],
+		[channelHandlers, wrappedWorkerStarted, wrappedWorkerStatus, wrappedWorkerIdle, wrappedWorkerCompleted, wrappedToolStarted, wrappedToolCompleted, handleOpenCodePartUpdated, handleAcpUpdateReceived, handleWorkerText, handleAgentMessage, bumpTaskVersion, handleCortexChatMessage, handleNotificationCreated, handleNotificationUpdated],
 	);
 
 	const onReconnect = useCallback(() => {
@@ -328,7 +348,7 @@ export function LiveContextProvider({ children, onBootstrapped }: { children: Re
 	}, [hasData, onBootstrapped]);
 
 	return (
-		<LiveContext.Provider value={{ liveStates, channels, connectionState, hasData, loadOlderMessages, activeLinks, activeWorkers, workerEventVersion, taskEventVersion, liveTranscripts, liveOpenCodeParts }}>
+		<LiveContext.Provider value={{ liveStates, channels, connectionState, hasData, loadOlderMessages, activeLinks, activeWorkers, workerEventVersion, taskEventVersion, liveTranscripts, liveOpenCodeParts, liveAcpUpdates }}>
 			{children}
 		</LiveContext.Provider>
 	);

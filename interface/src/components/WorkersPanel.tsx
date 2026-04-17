@@ -315,13 +315,13 @@ function WorkerPanelRow({
 					/>
 				)}
 				<p className="min-w-0 flex-1 truncate text-sm text-ink-dull">
-					{task.replace(/^\[opencode\]\s*/, "")}
+					{task.replace(/^\[opencode\]\s*/, "").replace(/^\[acp:[\w-]+\]\s*/, "")}
 				</p>
 			</div>
 			<div className="flex items-center gap-2 pl-3.5 text-tiny text-ink-faint">
 				<span className="font-medium text-ink-faint">{agentName}</span>
 				<span>·</span>
-				<span>{workerType === "opencode" ? "OpenCode" : workerType}</span>
+				<span>{workerType === "opencode" ? "OpenCode" : workerType === "acp" ? "ACP" : workerType}</span>
 				<span>·</span>
 				{isRunning ? (
 					<LiveDuration startMs={new Date(startedAt).getTime()} />

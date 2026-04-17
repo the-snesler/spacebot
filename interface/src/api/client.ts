@@ -63,7 +63,6 @@ export type {
 	CortexChatMessagesResponse,
 	CortexChatThreadsResponse,
 	// Config (schema types only)
-	GlobalSettingsResponse,
 	GlobalSettingsUpdateResponse,
 	RawConfigResponse,
 	RawConfigUpdateResponse,
@@ -239,6 +238,53 @@ export interface OpenCodePartUpdatedEvent {
 	part: OpenCodePart;
 }
 
+export type AcpToolStatus =
+	| "pending"
+	| "in_progress"
+	| "completed"
+	| "failed";
+
+export interface AcpPlanEntry {
+	content: string;
+	priority: string;
+	status: string;
+}
+
+export type AcpUpdate =
+	| { type: "agent_message"; id: string; text: string }
+	| { type: "user_message"; id: string; text: string }
+	| {
+			type: "tool_call";
+			id: string;
+			name: string;
+			title: string;
+			input?: string | null;
+	  }
+	| {
+			type: "tool_call_update";
+			id: string;
+			status: AcpToolStatus;
+			output?: string | null;
+			error?: string | null;
+	  }
+	| { type: "plan"; entries: AcpPlanEntry[] }
+	| { type: "step_finish"; stop_reason: string };
+
+export interface AcpSessionCreatedEvent {
+	type: "acp_session_created";
+	agent_id: string;
+	worker_id: string;
+	session_id: string;
+	profile_id: string;
+}
+
+export interface AcpUpdateReceivedEvent {
+	type: "acp_update_received";
+	agent_id: string;
+	worker_id: string;
+	update: AcpUpdate;
+}
+
 export interface WorkerTextEvent {
 	type: "worker_text";
 	agent_id: string;
@@ -268,6 +314,8 @@ export type ApiEvent =
 	| ToolStartedEvent
 	| ToolCompletedEvent
 	| OpenCodePartUpdatedEvent
+	| AcpSessionCreatedEvent
+	| AcpUpdateReceivedEvent
 	| WorkerTextEvent
 	| CortexChatMessageEvent;
 
@@ -886,6 +934,40 @@ export interface OpenCodeSettingsUpdate {
 	permissions?: Partial<OpenCodePermissions>;
 }
 
+export interface AcpProfile {
+	id: string;
+	display_name?: string | null;
+	command: string;
+	args: string[];
+	env: Record<string, string>;
+}
+
+export interface AcpSettings {
+	enabled: boolean;
+	handshake_timeout_secs: number;
+	stderr_buffer_bytes: number;
+	profiles: AcpProfile[];
+}
+
+export interface AcpSettingsUpdate {
+	enabled?: boolean;
+	handshake_timeout_secs?: number;
+	stderr_buffer_bytes?: number;
+	profiles?: AcpProfile[];
+}
+
+export interface GlobalSettingsResponse {
+	company_name: string;
+	brave_search_key?: string | null;
+	api_enabled: boolean;
+	api_port: number;
+	api_bind: string;
+	worker_log_mode: string;
+	opencode: OpenCodeSettings;
+	acp: AcpSettings;
+	ssh_enabled: boolean;
+}
+
 export interface GlobalSettingsUpdate {
 	company_name?: string;
 	brave_search_key?: string | null;
@@ -894,6 +976,8 @@ export interface GlobalSettingsUpdate {
 	api_bind?: string;
 	worker_log_mode?: string;
 	opencode?: OpenCodeSettingsUpdate;
+	acp?: AcpSettingsUpdate;
+	ssh_enabled?: boolean;
 }
 
 // -- Skills Types --
@@ -1908,9 +1992,9 @@ export const api = {
 	},
 
 	// Global Settings API
-	globalSettings: () => fetchJson<Types.GlobalSettingsResponse>("/settings"),
-	
-	updateGlobalSettings: async (settings: Types.GlobalSettingsUpdate) => {
+	globalSettings: () => fetchJson<GlobalSettingsResponse>("/settings"),
+
+	updateGlobalSettings: async (settings: GlobalSettingsUpdate) => {
 		const response = await fetch(`${getApiBase()}/settings`, {
 			method: "PUT",
 			headers: { "Content-Type": "application/json" },
