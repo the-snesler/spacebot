@@ -214,7 +214,7 @@ impl AcpWorker {
                         crate::acp::AcpEvt::Disconnected { reason } => {
                             Self::join_bridge(bridge_handle).await;
                             if session_created && awaiting_input {
-                                return Err(AgentError::Other(anyhow::anyhow!(reason)).into());
+                                return Ok(format!("ACP worker disconnected while idle: {reason}"));
                             }
                             return Err(AgentError::Other(anyhow::anyhow!(reason)).into());
                         }
