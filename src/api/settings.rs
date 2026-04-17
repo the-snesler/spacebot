@@ -15,6 +15,7 @@ pub(super) struct GlobalSettingsResponse {
     api_bind: String,
     worker_log_mode: String,
     opencode: OpenCodeSettingsResponse,
+    acp: AcpSettingsResponse,
     ssh_enabled: bool,
 }
 
@@ -35,6 +36,23 @@ pub(super) struct OpenCodePermissionsResponse {
     webfetch: String,
 }
 
+#[derive(Serialize, utoipa::ToSchema)]
+pub(super) struct AcpSettingsResponse {
+    enabled: bool,
+    handshake_timeout_secs: u64,
+    stderr_buffer_bytes: usize,
+    profiles: Vec<AcpProfileResponse>,
+}
+
+#[derive(Serialize, utoipa::ToSchema)]
+pub(super) struct AcpProfileResponse {
+    id: String,
+    display_name: Option<String>,
+    command: String,
+    args: Vec<String>,
+    env: std::collections::HashMap<String, String>,
+}
+
 #[derive(Deserialize, utoipa::ToSchema)]
 pub(super) struct GlobalSettingsUpdate {
     company_name: Option<String>,
@@ -44,6 +62,7 @@ pub(super) struct GlobalSettingsUpdate {
     api_bind: Option<String>,
     worker_log_mode: Option<String>,
     opencode: Option<OpenCodeSettingsUpdate>,
+    acp: Option<AcpSettingsUpdate>,
     ssh_enabled: Option<bool>,
 }
 
@@ -62,6 +81,25 @@ pub(super) struct OpenCodePermissionsUpdate {
     edit: Option<String>,
     bash: Option<String>,
     webfetch: Option<String>,
+}
+
+#[derive(Deserialize, utoipa::ToSchema)]
+pub(super) struct AcpSettingsUpdate {
+    enabled: Option<bool>,
+    handshake_timeout_secs: Option<u64>,
+    stderr_buffer_bytes: Option<usize>,
+    profiles: Option<Vec<AcpProfileUpdate>>,
+}
+
+#[derive(Deserialize, utoipa::ToSchema)]
+pub(super) struct AcpProfileUpdate {
+    id: String,
+    display_name: Option<String>,
+    command: String,
+    #[serde(default)]
+    args: Vec<String>,
+    #[serde(default)]
+    env: std::collections::HashMap<String, String>,
 }
 
 #[derive(Serialize, utoipa::ToSchema)]
@@ -109,6 +147,7 @@ pub(super) async fn get_global_settings(
         api_bind,
         worker_log_mode,
         opencode,
+        acp,
         ssh_enabled,
     ) = if config_path.exists() {
         let content = tokio::fs::read_to_string(&config_path).await.map_err(|error| {
@@ -212,6 +251,80 @@ pub(super) async fn get_global_settings(
             },
         };
 
+        let acp_table = doc.get("defaults").and_then(|d| d.get("acp"));
+        let acp_profiles = acp_table
+            .and_then(|table| table.get("profiles"))
+            .and_then(toml_edit::Item::as_array_of_tables)
+            .map(|profiles| {
+                profiles
+                    .iter()
+                    .map(|profile| AcpProfileResponse {
+                        id: profile
+                            .get("id")
+                            .and_then(toml_edit::Item::as_value)
+                            .and_then(|value| value.as_str())
+                            .unwrap_or_default()
+                            .to_string(),
+                        display_name: profile
+                            .get("display_name")
+                            .and_then(toml_edit::Item::as_value)
+                            .and_then(|value| value.as_str())
+                            .map(str::to_string),
+                        command: profile
+                            .get("command")
+                            .and_then(toml_edit::Item::as_value)
+                            .and_then(|value| value.as_str())
+                            .unwrap_or_default()
+                            .to_string(),
+                        args: profile
+                            .get("args")
+                            .and_then(toml_edit::Item::as_value)
+                            .and_then(|value| value.as_array())
+                            .map(|items| {
+                                items
+                                    .iter()
+                                    .filter_map(|value| value.as_str())
+                                    .map(str::to_string)
+                                    .collect::<Vec<_>>()
+                            })
+                            .unwrap_or_default(),
+                        env: profile
+                            .get("env")
+                            .and_then(toml_edit::Item::as_value)
+                            .and_then(|value| value.as_inline_table())
+                            .map(|table| {
+                                table
+                                    .iter()
+                                    .filter_map(|(key, value)| {
+                                        value
+                                            .as_str()
+                                            .map(|value| (key.to_string(), value.to_string()))
+                                    })
+                                    .collect::<std::collections::HashMap<_, _>>()
+                            })
+                            .unwrap_or_default(),
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        let acp = AcpSettingsResponse {
+            enabled: acp_table
+                .and_then(|table| table.get("enabled"))
+                .and_then(|value| value.as_bool())
+                .unwrap_or(false),
+            handshake_timeout_secs: acp_table
+                .and_then(|table| table.get("handshake_timeout_secs"))
+                .and_then(|value| value.as_integer())
+                .and_then(|value| u64::try_from(value).ok())
+                .unwrap_or(20),
+            stderr_buffer_bytes: acp_table
+                .and_then(|table| table.get("stderr_buffer_bytes"))
+                .and_then(|value| value.as_integer())
+                .and_then(|value| usize::try_from(value).ok())
+                .unwrap_or(16 * 1024),
+            profiles: acp_profiles,
+        };
+
         let ssh_enabled = doc
             .get("ssh")
             .and_then(|s| s.get("enabled"))
@@ -226,6 +339,7 @@ pub(super) async fn get_global_settings(
             api_bind,
             worker_log_mode,
             opencode,
+            acp,
             ssh_enabled,
         )
     } else {
@@ -248,6 +362,12 @@ pub(super) async fn get_global_settings(
                     webfetch: "allow".to_string(),
                 },
             },
+            AcpSettingsResponse {
+                enabled: false,
+                handshake_timeout_secs: 20,
+                stderr_buffer_bytes: 16 * 1024,
+                profiles: Vec::new(),
+            },
             false,
         )
     };
@@ -260,6 +380,7 @@ pub(super) async fn get_global_settings(
         api_bind,
         worker_log_mode,
         opencode,
+        acp,
         ssh_enabled,
     }))
 }
@@ -387,6 +508,51 @@ pub(super) async fn update_global_settings(
             if let Some(webfetch) = permissions.webfetch {
                 doc["defaults"]["opencode"]["permissions"]["webfetch"] = toml_edit::value(webfetch);
             }
+        }
+    }
+
+    if let Some(acp) = request.acp {
+        if doc.get("defaults").is_none() {
+            doc["defaults"] = toml_edit::Item::Table(toml_edit::Table::new());
+        }
+        if doc["defaults"].get("acp").is_none() {
+            doc["defaults"]["acp"] = toml_edit::Item::Table(toml_edit::Table::new());
+        }
+
+        if let Some(enabled) = acp.enabled {
+            doc["defaults"]["acp"]["enabled"] = toml_edit::value(enabled);
+        }
+        if let Some(timeout) = acp.handshake_timeout_secs {
+            doc["defaults"]["acp"]["handshake_timeout_secs"] = toml_edit::value(timeout as i64);
+        }
+        if let Some(stderr_buffer_bytes) = acp.stderr_buffer_bytes {
+            doc["defaults"]["acp"]["stderr_buffer_bytes"] =
+                toml_edit::value(stderr_buffer_bytes as i64);
+        }
+        if let Some(profiles) = acp.profiles {
+            let mut profile_tables = toml_edit::ArrayOfTables::new();
+            for profile in profiles {
+                let mut profile_table = toml_edit::Table::new();
+                profile_table["id"] = toml_edit::value(profile.id);
+                if let Some(display_name) = profile.display_name {
+                    profile_table["display_name"] = toml_edit::value(display_name);
+                }
+                profile_table["command"] = toml_edit::value(profile.command);
+
+                let mut args = toml_edit::Array::default();
+                for arg in profile.args {
+                    args.push(arg);
+                }
+                profile_table["args"] = toml_edit::Item::Value(toml_edit::Value::Array(args));
+
+                let mut env = toml_edit::InlineTable::default();
+                for (key, value) in profile.env {
+                    env.insert(key, toml_edit::Value::from(value));
+                }
+                profile_table["env"] = toml_edit::Item::Value(toml_edit::Value::InlineTable(env));
+                profile_tables.push(profile_table);
+            }
+            doc["defaults"]["acp"]["profiles"] = toml_edit::Item::ArrayOfTables(profile_tables);
         }
     }
 

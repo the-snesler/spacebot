@@ -593,6 +593,50 @@ impl ProcessRunLogger {
         });
     }
 
+    /// Record ACP session metadata on a worker run. Fire-and-forget.
+    ///
+    /// Only the profile ID is persisted because ACP sessions are not resumed
+    /// across restart in v1.
+    pub fn log_acp_metadata(&self, worker_id: WorkerId, profile_id: &str) {
+        let pool = self.pool.clone();
+        let id = worker_id.to_string();
+        let profile_id = profile_id.to_string();
+
+        tokio::spawn(async move {
+            const MAX_RETRIES: u32 = 5;
+            const BASE_DELAY_MS: u64 = 50;
+
+            for attempt in 0..=MAX_RETRIES {
+                match sqlx::query("UPDATE worker_runs SET acp_profile_id = ? WHERE id = ?")
+                    .bind(&profile_id)
+                    .bind(&id)
+                    .execute(&pool)
+                    .await
+                {
+                    Ok(result) if result.rows_affected() > 0 => return,
+                    Ok(_) if attempt < MAX_RETRIES => {
+                        tokio::time::sleep(std::time::Duration::from_millis(
+                            BASE_DELAY_MS * 2u64.pow(attempt),
+                        ))
+                        .await;
+                    }
+                    Ok(_) => {
+                        tracing::warn!(
+                            worker_id = %id,
+                            profile_id,
+                            "worker_runs row never appeared after ACP metadata retries"
+                        );
+                        return;
+                    }
+                    Err(error) => {
+                        tracing::warn!(%error, worker_id = %id, "failed to persist ACP metadata");
+                        return;
+                    }
+                }
+            }
+        });
+    }
+
     /// Mark orphaned **running** workers as failed for an agent.
     ///
     /// Called at startup to reconcile rows that were left in `running` status
@@ -636,7 +680,7 @@ impl ProcessRunLogger {
         let rows = sqlx::query_as::<_, IdleWorkerRow>(
             "SELECT id, task, channel_id, worker_type, transcript, \
                     COALESCE(tool_calls, 0) AS tool_calls, \
-                    opencode_session_id, opencode_port, directory \
+                    opencode_session_id, opencode_port, directory, acp_profile_id \
              FROM worker_runs \
              WHERE status = 'idle' AND interactive = TRUE \
                    AND (agent_id = ? OR agent_id IS NULL)",
@@ -922,6 +966,7 @@ impl ProcessRunLogger {
             "SELECT w.id, w.task, w.status, w.worker_type, w.channel_id, w.started_at, \
                     w.completed_at, w.transcript IS NOT NULL as has_transcript, \
                     w.tool_calls, w.opencode_port, w.opencode_session_id, w.directory, \
+                    w.acp_profile_id, \
                     w.interactive, \
                     c.display_name as channel_name, \
                     w.project_id \
@@ -979,6 +1024,7 @@ impl ProcessRunLogger {
                 opencode_port: row.try_get::<i32, _>("opencode_port").ok(),
                 opencode_session_id: row.try_get("opencode_session_id").ok().flatten(),
                 directory: row.try_get("directory").ok().flatten(),
+                acp_profile_id: row.try_get("acp_profile_id").ok().flatten(),
                 interactive: row.try_get::<bool, _>("interactive").unwrap_or(false),
                 project_id: row.try_get("project_id").ok().flatten(),
                 // Resolved by caller via the global `ProjectStore` — see module note.
@@ -999,6 +1045,7 @@ impl ProcessRunLogger {
             "SELECT w.id, w.task, w.result, w.status, w.worker_type, w.channel_id, \
                     w.started_at, w.completed_at, w.transcript, w.tool_calls, \
                     w.opencode_session_id, w.opencode_port, w.interactive, w.directory, \
+                    w.acp_profile_id, \
                     c.display_name as channel_name \
              FROM worker_runs w \
              LEFT JOIN channels c ON w.channel_id = c.id \
@@ -1036,6 +1083,7 @@ impl ProcessRunLogger {
             directory: row
                 .try_get::<Option<String>, _>("directory")
                 .unwrap_or(None),
+            acp_profile_id: row.try_get("acp_profile_id").ok(),
         }))
     }
 }
@@ -1056,6 +1104,7 @@ pub struct WorkerRunRow {
     pub opencode_port: Option<i32>,
     pub opencode_session_id: Option<String>,
     pub directory: Option<String>,
+    pub acp_profile_id: Option<String>,
     pub interactive: bool,
     pub project_id: Option<String>,
     pub project_name: Option<String>,
@@ -1073,6 +1122,7 @@ pub struct IdleWorkerRow {
     pub opencode_session_id: Option<String>,
     pub opencode_port: Option<i32>,
     pub directory: Option<String>,
+    pub acp_profile_id: Option<String>,
 }
 
 /// A worker run row with full detail including the transcript blob.
@@ -1093,6 +1143,7 @@ pub struct WorkerDetailRow {
     pub opencode_port: Option<i32>,
     pub interactive: bool,
     pub directory: Option<String>,
+    pub acp_profile_id: Option<String>,
 }
 
 #[cfg(test)]

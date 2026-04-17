@@ -312,6 +312,77 @@ pub fn convert_opencode_parts(
     steps
 }
 
+/// Convert ACP updates into transcript steps and collect assistant text.
+pub fn convert_acp_updates(updates: &[crate::acp::AcpUpdate]) -> (Vec<TranscriptStep>, String) {
+    let mut steps = Vec::new();
+    let mut all_text = String::new();
+    let mut tool_names = std::collections::HashMap::<String, String>::new();
+
+    for update in updates {
+        match update {
+            crate::acp::AcpUpdate::AgentMessage { text, .. } => {
+                if text.is_empty() {
+                    continue;
+                }
+                if !all_text.is_empty() {
+                    all_text.push_str("\n\n");
+                }
+                all_text.push_str(text);
+                steps.push(TranscriptStep::Action {
+                    content: vec![ActionContent::Text { text: text.clone() }],
+                });
+            }
+            crate::acp::AcpUpdate::UserMessage { text, .. } => {
+                if !text.is_empty() {
+                    steps.push(TranscriptStep::UserText { text: text.clone() });
+                }
+            }
+            crate::acp::AcpUpdate::ToolCall {
+                id, name, input, ..
+            } => {
+                tool_names.insert(id.clone(), name.clone());
+                let args = input.clone().unwrap_or_default();
+                let args = if args.len() > MAX_TOOL_ARGS_BYTES {
+                    truncate_output(&args, MAX_TOOL_ARGS_BYTES)
+                } else {
+                    args
+                };
+                steps.push(TranscriptStep::Action {
+                    content: vec![ActionContent::ToolCall {
+                        id: id.clone(),
+                        name: name.clone(),
+                        args,
+                    }],
+                });
+            }
+            crate::acp::AcpUpdate::ToolCallUpdate {
+                id, output, error, ..
+            } => {
+                let Some(text) = output
+                    .as_ref()
+                    .or(error.as_ref())
+                    .filter(|text| !text.is_empty())
+                else {
+                    continue;
+                };
+                let result_text = if let Some(error_text) = error {
+                    format!("Error: {error_text}")
+                } else {
+                    truncate_output(text, MAX_TOOL_OUTPUT_BYTES)
+                };
+                steps.push(TranscriptStep::ToolResult {
+                    call_id: id.clone(),
+                    name: tool_names.get(id).cloned().unwrap_or_default(),
+                    text: result_text,
+                });
+            }
+            crate::acp::AcpUpdate::Plan { .. } | crate::acp::AcpUpdate::StepFinish { .. } => {}
+        }
+    }
+
+    (steps, all_text)
+}
+
 /// Convert a persisted `Vec<TranscriptStep>` back into a Rig `Vec<Message>` history.
 ///
 /// Used when resuming an idle interactive worker after restart: the transcript
