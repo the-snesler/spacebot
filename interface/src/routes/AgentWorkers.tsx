@@ -699,9 +699,11 @@ function AcpUpdateView({update}: {update: AcpUpdate}) {
 	if (update.type === "tool_call_update") {
 		return (
 			<div className="rounded-lg border border-app-line/50 bg-app-dark-box/20 p-3">
-				<div className="text-xs font-medium capitalize text-ink">
-					Tool {update.status.replaceAll("_", " ")}
-				</div>
+				{update.status && (
+					<div className="text-xs font-medium capitalize text-ink">
+						Tool {update.status.replace(/_/g, " ")}
+					</div>
+				)}
 				{update.output && (
 					<pre className="mt-2 overflow-x-auto rounded bg-app-dark-box/40 p-2 text-[11px] text-ink-dull">
 						{update.output}

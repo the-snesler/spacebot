@@ -264,7 +264,7 @@ export type AcpUpdate =
 	| {
 			type: "tool_call_update";
 			id: string;
-			status: AcpToolStatus;
+			status?: AcpToolStatus | null;
 			output?: string | null;
 			error?: string | null;
 	  }

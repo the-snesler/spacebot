@@ -119,7 +119,7 @@ pub enum AcpUpdate {
     },
     ToolCallUpdate {
         id: String,
-        status: AcpToolStatus,
+        status: Option<AcpToolStatus>,
         output: Option<String>,
         error: Option<String>,
     },
@@ -154,15 +154,16 @@ impl AcpUpdate {
             }),
             acp::SessionUpdate::ToolCallUpdate(update) => {
                 let output = update.fields.raw_output.as_ref().map(stringify_json);
-                let status = update.fields.status.unwrap_or(acp::ToolCallStatus::Pending);
-                let (output, error) = if matches!(status, acp::ToolCallStatus::Failed) {
+                let status = update.fields.status.map(AcpToolStatus::from);
+                let is_failed = matches!(status, Some(AcpToolStatus::Failed));
+                let (output, error) = if is_failed {
                     (None, output)
                 } else {
                     (output, None)
                 };
                 Some(Self::ToolCallUpdate {
                     id: update.tool_call_id.to_string(),
-                    status: status.into(),
+                    status,
                     output,
                     error,
                 })
