@@ -302,9 +302,15 @@ impl Tool for SpawnWorkerTool {
             );
         }
 
-        let worker_type_label = if is_opencode { "OpenCode" } else { "builtin" };
-        // OpenCode workers are always interactive regardless of args.interactive.
-        let effectively_interactive = args.interactive || is_opencode;
+        let worker_type_label = if is_opencode {
+            "OpenCode"
+        } else if is_acp {
+            "ACP"
+        } else {
+            "builtin"
+        };
+        // OpenCode and ACP workers are always interactive regardless of args.interactive.
+        let effectively_interactive = args.interactive || is_opencode || is_acp;
         let message = if effectively_interactive {
             format!(
                 "Interactive {worker_type_label} worker {worker_id} spawned for: {}. Route follow-ups with route_to_worker.",
