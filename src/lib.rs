@@ -1,5 +1,6 @@
 //! Spacebot: A Rust agentic system where every LLM process has a dedicated role.
 
+pub mod acp;
 pub mod agent;
 pub mod api;
 pub mod auth;
@@ -279,12 +280,26 @@ pub enum ProcessEvent {
         session_id: String,
         port: u16,
     },
+    /// An ACP worker created a session.
+    AcpSessionCreated {
+        agent_id: AgentId,
+        worker_id: WorkerId,
+        channel_id: Option<ChannelId>,
+        session_id: String,
+        profile_id: String,
+    },
     /// A finalized content part from an OpenCode worker session. Emitted on every
     /// `message.part.updated` SSE event so the frontend can build a live transcript.
     OpenCodePartUpdated {
         agent_id: AgentId,
         worker_id: WorkerId,
         part: crate::opencode::types::OpenCodePart,
+    },
+    /// A projected ACP update from a running ACP session.
+    AcpUpdateReceived {
+        agent_id: AgentId,
+        worker_id: WorkerId,
+        update: crate::acp::AcpUpdate,
     },
     /// An interactive worker's initial task completed. The worker remains alive
     /// for follow-ups, but the channel should retrigger to deliver this result.

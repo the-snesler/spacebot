@@ -287,6 +287,19 @@ pub enum ApiEvent {
         worker_id: String,
         part: crate::opencode::types::OpenCodePart,
     },
+    /// An ACP session was created for a worker.
+    AcpSessionCreated {
+        agent_id: String,
+        worker_id: String,
+        session_id: String,
+        profile_id: String,
+    },
+    /// A projected ACP update from a running worker.
+    AcpUpdateReceived {
+        agent_id: String,
+        worker_id: String,
+        update: crate::acp::AcpUpdate,
+    },
     /// A worker emitted text content (model reasoning between tool calls).
     WorkerText {
         agent_id: String,
@@ -737,6 +750,32 @@ impl ApiState {
                                         agent_id: agent_id.clone(),
                                         worker_id: worker_id.to_string(),
                                         part: part.clone(),
+                                    })
+                                    .ok();
+                            }
+                            ProcessEvent::AcpSessionCreated {
+                                worker_id,
+                                session_id,
+                                profile_id,
+                                ..
+                            } => {
+                                api_tx
+                                    .send(ApiEvent::AcpSessionCreated {
+                                        agent_id: agent_id.clone(),
+                                        worker_id: worker_id.to_string(),
+                                        session_id: session_id.clone(),
+                                        profile_id: profile_id.clone(),
+                                    })
+                                    .ok();
+                            }
+                            ProcessEvent::AcpUpdateReceived {
+                                worker_id, update, ..
+                            } => {
+                                api_tx
+                                    .send(ApiEvent::AcpUpdateReceived {
+                                        agent_id: agent_id.clone(),
+                                        worker_id: worker_id.to_string(),
+                                        update: update.clone(),
                                     })
                                     .ok();
                             }
