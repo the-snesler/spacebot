@@ -1407,7 +1407,9 @@ fn signal_from_event(event: ProcessEvent) -> Option<Signal> {
         },
         // UI-only events — no cortex signal needed.
         ProcessEvent::OpenCodeSessionCreated { .. }
+        | ProcessEvent::AcpSessionCreated { .. }
         | ProcessEvent::OpenCodePartUpdated { .. }
+        | ProcessEvent::AcpUpdateReceived { .. }
         | ProcessEvent::WorkerInitialResult { .. }
         | ProcessEvent::WorkerText { .. }
         | ProcessEvent::CortexChatUpdate { .. }

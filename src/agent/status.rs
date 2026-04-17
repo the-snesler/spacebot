@@ -3,6 +3,18 @@
 use crate::{BranchId, ProcessEvent, ProcessId, WorkerId};
 use chrono::{DateTime, Utc};
 
+fn normalize_worker_task(task: &str) -> &str {
+    if let Some(task) = task.strip_prefix("[opencode] ") {
+        return task;
+    }
+    if let Some(rest) = task.strip_prefix("[acp:")
+        && let Some((_, task)) = rest.split_once("] ")
+    {
+        return task;
+    }
+    task
+}
+
 /// Static system configuration snapshot injected into the status block.
 ///
 /// Assembled from `RuntimeConfig` each turn and rendered as a compact
@@ -476,12 +488,9 @@ impl StatusBlock {
     /// comparisons strip that prefix before matching. Returns the existing
     /// worker's ID if found.
     pub fn find_duplicate_worker_task(&self, task: &str) -> Option<WorkerId> {
-        let normalized = task.strip_prefix("[opencode] ").unwrap_or(task);
+        let normalized = normalize_worker_task(task);
         self.active_workers.iter().find_map(|worker| {
-            let existing = worker
-                .task
-                .strip_prefix("[opencode] ")
-                .unwrap_or(&worker.task);
+            let existing = normalize_worker_task(&worker.task);
             (existing == normalized).then_some(worker.id)
         })
     }

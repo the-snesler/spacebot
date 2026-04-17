@@ -217,6 +217,9 @@ pub struct ChannelState {
     /// Input senders for interactive workers, keyed by worker ID.
     /// Used by the route tool to deliver follow-up messages.
     pub worker_inputs: Arc<RwLock<HashMap<WorkerId, tokio::sync::mpsc::Sender<String>>>>,
+    /// ACP input senders for interactive ACP workers.
+    pub acp_worker_inputs:
+        Arc<RwLock<HashMap<WorkerId, tokio::sync::mpsc::Sender<crate::acp::AcpCmd>>>>,
     /// Injection senders for all workers, keyed by worker ID.
     /// Used by the route tool to deliver addendum context to running workers
     /// without requiring the worker to be interactive.
@@ -277,16 +280,39 @@ impl ChannelState {
         worker_id: WorkerId,
         reason: &str,
     ) -> std::result::Result<(), String> {
-        // Abort via read access so the handle stays in worker_handles.
-        // The WorkerComplete event handler will remove it and trigger a retrigger.
-        let aborted = {
+        // Snapshot the cancellation surfaces first so we do not hold channel
+        // locks across awaits while giving ACP workers a short grace period.
+        let abort_handle = {
             let handles = self.worker_handles.read().await;
-            if let Some(handle) = handles.get(&worker_id) {
-                handle.abort();
-                true
+            handles
+                .get(&worker_id)
+                .map(tokio::task::JoinHandle::abort_handle)
+        };
+        let acp_input = self.acp_worker_inputs.read().await.get(&worker_id).cloned();
+
+        // Abort via the copied AbortHandle so the JoinHandle stays registered.
+        // The WorkerComplete event handler remains the source of truth for
+        // cleanup and retrigger behavior.
+        let aborted = if let Some(abort_handle) = abort_handle {
+            if let Some(acp_input) = acp_input {
+                let _ = acp_input.send(crate::acp::AcpCmd::Cancel).await;
+                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+
+                let finished = {
+                    let handles = self.worker_handles.read().await;
+                    handles
+                        .get(&worker_id)
+                        .is_none_or(tokio::task::JoinHandle::is_finished)
+                };
+                if !finished {
+                    abort_handle.abort();
+                }
             } else {
-                false
+                abort_handle.abort();
             }
+            true
+        } else {
+            false
         };
 
         // Stop routing messages to the dead worker immediately.
@@ -296,11 +322,17 @@ impl ChannelState {
             .await
             .remove(&worker_id)
             .is_some();
+        let removed_acp_input = self
+            .acp_worker_inputs
+            .write()
+            .await
+            .remove(&worker_id)
+            .is_some();
         self.worker_injections.write().await.remove(&worker_id);
 
         if !aborted {
             let removed_status = self.status_block.write().await.remove_worker(worker_id);
-            if removed_input || removed_status {
+            if removed_input || removed_acp_input || removed_status {
                 return Ok(());
             }
             return Err(format!("Worker {worker_id} not found"));
@@ -730,6 +762,7 @@ impl Channel {
             active_workers: active_workers.clone(),
             worker_handles: Arc::new(RwLock::new(HashMap::new())),
             worker_inputs: Arc::new(RwLock::new(HashMap::new())),
+            acp_worker_inputs: Arc::new(RwLock::new(HashMap::new())),
             worker_injections: Arc::new(RwLock::new(HashMap::new())),
             reserved_tasks: Arc::new(RwLock::new(HashSet::new())),
             status_block: status_block.clone(),
@@ -1814,12 +1847,20 @@ impl Channel {
         let browser_enabled = rc.browser_config.load().enabled;
         let web_search_enabled = rc.brave_search_key.load().is_some();
         let opencode_enabled = rc.opencode.load().enabled;
+        let acp_profiles = rc
+            .acp
+            .load()
+            .profiles
+            .iter()
+            .map(crate::acp::AcpProfileInfo::from)
+            .collect::<Vec<_>>();
         let sandbox_enabled = self.deps.sandbox.containment_active();
         let mcp_tool_names = self.deps.mcp_manager.get_tool_names().await;
         let worker_capabilities = prompt_engine.render_worker_capabilities(
             browser_enabled,
             web_search_enabled,
             opencode_enabled,
+            &acp_profiles,
             &mcp_tool_names,
         )?;
 
@@ -2528,12 +2569,20 @@ impl Channel {
         let browser_enabled = rc.browser_config.load().enabled;
         let web_search_enabled = rc.brave_search_key.load().is_some();
         let opencode_enabled = rc.opencode.load().enabled;
+        let acp_profiles = rc
+            .acp
+            .load()
+            .profiles
+            .iter()
+            .map(crate::acp::AcpProfileInfo::from)
+            .collect::<Vec<_>>();
         let sandbox_enabled = self.deps.sandbox.containment_active();
         let mcp_tool_names = self.deps.mcp_manager.get_tool_names().await;
         let worker_capabilities = prompt_engine.render_worker_capabilities(
             browser_enabled,
             web_search_enabled,
             opencode_enabled,
+            &acp_profiles,
             &mcp_tool_names,
         )?;
 
@@ -3289,6 +3338,7 @@ impl Channel {
 
                 self.state.active_workers.write().await.remove(worker_id);
                 self.state.worker_inputs.write().await.remove(worker_id);
+                self.state.acp_worker_inputs.write().await.remove(worker_id);
                 self.state.worker_injections.write().await.remove(worker_id);
 
                 // Record worker completion in working memory.
@@ -3337,6 +3387,13 @@ impl Channel {
                 ..
             } => {
                 run_logger.log_opencode_metadata(*worker_id, session_id, *port);
+            }
+            ProcessEvent::AcpSessionCreated {
+                worker_id,
+                profile_id,
+                ..
+            } => {
+                run_logger.log_acp_metadata(*worker_id, profile_id);
             }
             ProcessEvent::WorkerInitialResult {
                 worker_id, result, ..

@@ -2110,6 +2110,15 @@ async fn run(
                                 );
                             }
                             Err(reason) => {
+                                if idle_worker.worker_type == "acp" {
+                                    tracing::info!(
+                                        worker_id = %idle_worker.id,
+                                        channel_id = %conversation_id,
+                                        %reason,
+                                        "failed idle ACP worker during startup reconciliation"
+                                    );
+                                    continue;
+                                }
                                 // Resume failed at runtime (e.g. OpenCode disabled,
                                 // transcript corrupt). Retire the worker.
                                 if let Err(error) =

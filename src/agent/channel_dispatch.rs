@@ -2,7 +2,7 @@
 //!
 //! Contains the public entry points that channel tools use to create
 //! background processes: `spawn_branch_from_state`, `spawn_worker_from_state`,
-//! and `spawn_opencode_worker_from_state`.
+//! `spawn_opencode_worker_from_state`, and `spawn_acp_worker_from_state`.
 
 use crate::agent::branch::{Branch, BranchExecutionConfig};
 use crate::agent::channel::ChannelState;
@@ -16,6 +16,18 @@ use futures::FutureExt as _;
 use std::sync::Arc;
 use tokio::sync::broadcast;
 use tracing::Instrument as _;
+
+fn normalize_worker_task_label(task: &str) -> String {
+    if let Some(task) = task.strip_prefix("[opencode] ") {
+        return task.to_string();
+    }
+    if let Some(rest) = task.strip_prefix("[acp:")
+        && let Some((_, task)) = rest.split_once("] ")
+    {
+        return task.to_string();
+    }
+    task.to_string()
+}
 
 /// Validate worker capacity for a channel based on current active worker count.
 pub(crate) fn reserve_worker_slot_local(
@@ -424,8 +436,7 @@ async fn reserve_task_if_unique(
     state: &ChannelState,
     task: &str,
 ) -> std::result::Result<(), AgentError> {
-    // Normalize the task for comparison (strip [opencode] prefix).
-    let normalized = task.strip_prefix("[opencode] ").unwrap_or(task).to_string();
+    let normalized = normalize_worker_task_label(task);
 
     let mut reserved = state.reserved_tasks.write().await;
 
@@ -455,7 +466,7 @@ async fn reserve_task_if_unique(
 /// Release a task reservation after the worker has been registered in the
 /// status block or the spawn failed.
 async fn release_task_reservation(state: &ChannelState, task: &str) {
-    let normalized = task.strip_prefix("[opencode] ").unwrap_or(task).to_string();
+    let normalized = normalize_worker_task_label(task);
     state.reserved_tasks.write().await.remove(&normalized);
 }
 
@@ -809,6 +820,122 @@ async fn spawn_worker_inner(
     Ok(worker_id)
 }
 
+/// Spawn an ACP-backed worker for coding tasks.
+pub async fn spawn_acp_worker_from_state(
+    state: &ChannelState,
+    task: impl Into<String>,
+    directory: &str,
+    profile_id: &str,
+) -> std::result::Result<crate::WorkerId, AgentError> {
+    check_worker_limit(state).await?;
+    let task = task.into();
+    let tagged_task = format!("[acp:{profile_id}] {task}");
+    reserve_task_if_unique(state, &tagged_task).await?;
+    ensure_dispatch_readiness(state, "acp_worker");
+
+    let result = spawn_acp_worker_inner(state, &task, directory, profile_id).await;
+    release_task_reservation(state, &tagged_task).await;
+    result
+}
+
+async fn spawn_acp_worker_inner(
+    state: &ChannelState,
+    task: &str,
+    directory: &str,
+    profile_id: &str,
+) -> std::result::Result<crate::WorkerId, AgentError> {
+    let directory = expand_tilde(directory);
+    let rc = &state.deps.runtime_config;
+    let acp_config = rc.acp.load();
+
+    if !acp_config.enabled {
+        return Err(AgentError::Other(anyhow::anyhow!(
+            "ACP workers are not enabled in config"
+        )));
+    }
+
+    let profile = acp_config
+        .profiles
+        .iter()
+        .find(|profile| profile.id == profile_id)
+        .cloned()
+        .ok_or_else(|| {
+            AgentError::Other(anyhow::anyhow!("ACP profile `{profile_id}` not found"))
+        })?;
+
+    let (worker, input_tx) = crate::acp::AcpWorker::new_interactive(
+        Some(state.channel_id.clone()),
+        state.deps.agent_id.clone(),
+        task,
+        directory.clone(),
+        profile.clone(),
+        state.deps.event_tx.clone(),
+        state.deps.sqlite_pool.clone(),
+        acp_config.handshake_timeout_secs,
+        acp_config.stderr_buffer_bytes,
+    );
+    let worker_id = worker.id;
+    state
+        .acp_worker_inputs
+        .write()
+        .await
+        .insert(worker_id, input_tx);
+
+    let worker_span = tracing::info_span!(
+        "worker.run",
+        worker_id = %worker_id,
+        channel_id = %state.channel_id,
+        worker_type = "acp",
+        acp_profile = %profile.id,
+    );
+    let handle = spawn_worker_task(
+        worker_id,
+        state.deps.event_tx.clone(),
+        state.deps.agent_id.clone(),
+        Some(state.channel_id.clone()),
+        None,
+        "acp",
+        worker.run().instrument(worker_span),
+    );
+
+    state.worker_handles.write().await.insert(worker_id, handle);
+
+    let acp_task = format!("[acp:{}] {task}", profile.id);
+    {
+        let mut status = state.status_block.write().await;
+        status.add_worker(worker_id, &acp_task, false, true);
+    }
+
+    state
+        .deps
+        .event_tx
+        .send(crate::ProcessEvent::WorkerStarted {
+            agent_id: state.deps.agent_id.clone(),
+            worker_id,
+            channel_id: Some(state.channel_id.clone()),
+            task: acp_task,
+            worker_type: "acp".into(),
+            interactive: true,
+            directory: Some(directory.to_string_lossy().to_string()),
+        })
+        .ok();
+
+    state
+        .deps
+        .working_memory
+        .emit(
+            crate::memory::WorkingMemoryEventType::WorkerSpawned,
+            format!("Worker spawned (acp:{}): {task}", profile.id),
+        )
+        .channel(state.channel_id.to_string())
+        .importance(0.6)
+        .record();
+
+    tracing::info!(worker_id = %worker_id, task = %task, acp_profile = %profile.id, "ACP worker spawned");
+
+    Ok(worker_id)
+}
+
 /// Spawn an OpenCode-backed worker for coding tasks.
 ///
 /// Instead of a Rig agent loop, this spawns an OpenCode subprocess that has its
@@ -1136,6 +1263,19 @@ pub async fn resume_idle_worker_into_state(
         .map_err(|error| format!("invalid worker ID '{}': {error}", idle_worker.id))?;
 
     match idle_worker.worker_type.as_str() {
+        "acp" => {
+            if let Err(error) = state
+                .process_run_logger
+                .fail_idle_worker(
+                    &idle_worker.id,
+                    "ACP workers cannot be resumed across restart; spawn a new one",
+                )
+                .await
+            {
+                tracing::warn!(%error, worker_id = %idle_worker.id, "failed to fail idle ACP worker");
+            }
+            Err("ACP workers cannot be resumed across restart; spawn a new one".into())
+        }
         "opencode" => {
             let session_id = idle_worker
                 .opencode_session_id

@@ -481,11 +481,16 @@ pub(crate) fn event_is_for_channel(event: &ProcessEvent, channel_id: &ChannelId)
             channel_id: event_channel,
             ..
         } => event_channel.as_ref() == Some(channel_id),
+        ProcessEvent::AcpSessionCreated {
+            channel_id: event_channel,
+            ..
+        } => event_channel.as_ref() == Some(channel_id),
         ProcessEvent::SettingsUpdated {
             channel_id: event_channel,
             ..
         } => event_channel == channel_id,
         ProcessEvent::OpenCodePartUpdated { .. }
+        | ProcessEvent::AcpUpdateReceived { .. }
         | ProcessEvent::StatusUpdate { .. }
         | ProcessEvent::TaskUpdated { .. }
         | ProcessEvent::WorkerText { .. }

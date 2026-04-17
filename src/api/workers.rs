@@ -52,6 +52,8 @@ pub(super) struct WorkerListItem {
     opencode_session_id: Option<String>,
     /// Working directory for OpenCode workers.
     directory: Option<String>,
+    /// ACP profile id for ACP workers.
+    acp_profile_id: Option<String>,
     /// Whether this worker accepts follow-up input via route.
     interactive: bool,
     /// Project ID this worker is linked to.
@@ -87,6 +89,8 @@ pub(super) struct WorkerDetailResponse {
     interactive: bool,
     /// Working directory for OpenCode workers.
     directory: Option<String>,
+    /// ACP profile id for ACP workers.
+    acp_profile_id: Option<String>,
 }
 
 /// List worker runs for an agent, with live status merged from StatusBlocks.
@@ -192,6 +196,7 @@ pub(super) async fn list_workers(
                 opencode_port: row.opencode_port,
                 opencode_session_id: row.opencode_session_id,
                 directory: row.directory,
+                acp_profile_id: row.acp_profile_id,
                 interactive: row.interactive,
                 project_name: row
                     .project_id
@@ -266,5 +271,6 @@ pub(super) async fn worker_detail(
         opencode_port: detail.opencode_port,
         interactive: detail.interactive,
         directory: detail.directory,
+        acp_profile_id: detail.acp_profile_id,
     }))
 }
