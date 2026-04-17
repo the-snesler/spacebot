@@ -122,6 +122,29 @@ impl Tool for RouteTool {
                 }
                 drop(inputs);
 
+                let acp_inputs = self.state.acp_worker_inputs.read().await;
+                if let Some(input_tx) = acp_inputs.get(&worker_id).cloned() {
+                    drop(acp_inputs);
+
+                    input_tx
+                        .send(crate::acp::AcpCmd::Prompt(args.message))
+                        .await
+                        .map_err(|_| {
+                            RouteError(format!(
+                                "ACP worker {worker_id} has stopped accepting input (channel closed)"
+                            ))
+                        })?;
+
+                    return Ok(RouteOutput {
+                        routed: true,
+                        worker_id,
+                        message: format!(
+                            "Message delivered to ACP worker {worker_id} (follow-up input)."
+                        ),
+                    });
+                }
+                drop(acp_inputs);
+
                 // Worker is idle but has no input channel — shouldn't happen
                 // for interactive workers, but fall through to injection.
             }
@@ -164,7 +187,13 @@ impl Tool for RouteTool {
                     .read()
                     .await
                     .contains_key(&worker_id);
-                if has_input {
+                let has_acp_input = self
+                    .state
+                    .acp_worker_inputs
+                    .read()
+                    .await
+                    .contains_key(&worker_id);
+                if has_input || has_acp_input {
                     return Ok(RouteOutput {
                         routed: false,
                         worker_id,

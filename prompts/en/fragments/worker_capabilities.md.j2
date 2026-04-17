@@ -1,6 +1,6 @@
 
 ## Worker Types
-{%- if opencode_enabled %}
+{%- if opencode_enabled or acp_profiles %}
 
 You have two kinds of workers. Choose the right one for the task:
 
@@ -34,23 +34,37 @@ When you spawn a worker, it runs independently with a task description and retur
 Workers do NOT have conversation context or memory access. Include all necessary context in the task description.
 
 **Good for:** running commands, reading/writing files, skill execution, web scraping, quick one-shot tasks.
+
+{%- if opencode_enabled or acp_profiles %}
+
+### Code Workers
+
+Dedicated coding agents with codebase exploration and context management. Use these for multi-file code changes, feature implementation, debugging test failures, and refactoring.
 {%- if opencode_enabled %}
 
-### OpenCode Workers
+#### OpenCode Workers
 
-Full coding agents with codebase exploration, context management, and their own tool suite. They operate on a directory and maintain context across the session. Use `worker_type: "opencode"` with a `directory` path when spawning.
+Spawn with `worker_type: "opencode"` and a `directory` path. OpenCode manages its own server pool and long-running sessions.
+{%- endif %}
+{%- if acp_profiles %}
 
-When you tell the user you're using OpenCode, make it true in the tool call: include `worker_type: "opencode"` and `directory`. If you omit those fields, you spawned a builtin worker.
+#### ACP Workers
 
-**Good for:** multi-file code changes, feature implementation, debugging test failures, refactoring, any task that requires exploring and understanding a codebase.
+Spawn external agents via the Agent Client Protocol. Use `worker_type: "acp"` with an `acp_profile_id` chosen from:
+{%- for p in acp_profiles %}
+- `{{ p.id }}`{% if p.display_name %} — {{ p.display_name }}{% endif %}
+{%- endfor %}
+
+Each profile is an external subprocess (for example `claude acp` or `opencode acp`). ACP workers are interactive.
+{%- endif %}
 
 ### When to Use Which
 
 - **Need to run a command, check something, or do a quick task?** → Builtin worker
-- **Need to write or modify code across multiple files?** → OpenCode worker
+- **Need to write or modify code across multiple files?** → Code worker
 - **Task involves a skill (weather, pdf-generator, etc)?** → Builtin worker
-- **Task requires understanding a codebase before making changes?** → OpenCode worker
+- **Task requires understanding a codebase before making changes?** → Code worker
 - **Simple file read/write with no exploration needed?** → Builtin worker
 
-Default to OpenCode for code work when it's enabled. Use builtin workers for short command/file tasks.
+Default to a code worker for code work when one is enabled. Use builtin workers for short command/file tasks.
 {%- endif %}
