@@ -187,12 +187,14 @@ impl AcpWorker {
                                     prompt_result.clear();
                                 }
                                 agent_client_protocol::StopReason::Refusal => {
+                                    bridge_tx.send(AcpCmd::Shutdown).await.ok();
                                     Self::join_bridge(bridge_handle).await;
                                     return Err(AgentError::Other(anyhow::anyhow!(
                                         "ACP agent refused the task"
                                     )).into());
                                 }
                                 agent_client_protocol::StopReason::Cancelled => {
+                                    bridge_tx.send(AcpCmd::Shutdown).await.ok();
                                     Self::join_bridge(bridge_handle).await;
                                     return Err(AgentError::Cancelled {
                                         reason: "ACP session cancelled".into(),
@@ -200,6 +202,7 @@ impl AcpWorker {
                                     .into());
                                 }
                                 _ => {
+                                    bridge_tx.send(AcpCmd::Shutdown).await.ok();
                                     Self::join_bridge(bridge_handle).await;
                                     return Err(AgentError::Other(anyhow::anyhow!(
                                         "ACP agent stopped for an unknown reason"
