@@ -1,4 +1,4 @@
-import {useEffect, useMemo, useState} from "react";
+import {useEffect, useMemo, useRef, useState} from "react";
 import {useMutation, useQueryClient} from "@tanstack/react-query";
 import {api, type AcpProfile} from "@/api/client";
 import {Button, Input, SelectContent, SelectItem, SelectRoot, SelectTrigger, SelectValue} from "@spacedrive/primitives";
@@ -8,12 +8,12 @@ import {PERMISSION_OPTIONS} from "./constants";
 type WorkerTab = "opencode" | "acp";
 
 function profileArgsToString(args: string[]) {
-	return args.join(", ");
+	return args.join("\n");
 }
 
 function parseArgs(args: string) {
 	return args
-		.split(",")
+		.split("\n")
 		.map((value) => value.trim())
 		.filter(Boolean);
 }
@@ -29,6 +29,7 @@ function cloneProfiles(profiles: AcpProfile[]) {
 export function CodeWorkersSection({settings, isLoading}: GlobalSettingsSectionProps) {
 	const queryClient = useQueryClient();
 	const [activeTab, setActiveTab] = useState<WorkerTab>("opencode");
+	const envKeyCounter = useRef(0);
 
 	const [enabled, setEnabled] = useState(settings?.opencode?.enabled ?? false);
 	const [path, setPath] = useState(settings?.opencode?.path ?? "opencode");
@@ -418,7 +419,7 @@ export function CodeWorkersSection({settings, isLoading}: GlobalSettingsSectionP
 						</div>
 						<div className="flex flex-col gap-4">
 							{acpProfiles.map((profile, index) => (
-								<div key={`${index}-${profile.id}`} className="rounded-lg border border-app-line/60 bg-app-dark-box/10 p-4">
+								<div key={index} className="rounded-lg border border-app-line/60 bg-app-dark-box/10 p-4">
 									<div className="mb-3 flex items-center justify-between">
 										<span className="text-xs font-medium uppercase tracking-wider text-ink-faint">
 											Profile {index + 1}
@@ -443,10 +444,12 @@ export function CodeWorkersSection({settings, isLoading}: GlobalSettingsSectionP
 											onChange={(e) => updateProfile(index, {command: e.target.value})}
 											placeholder="claude"
 										/>
-										<Input
+										<textarea
 											value={profileArgsToString(profile.args)}
 											onChange={(e) => updateProfile(index, {args: parseArgs(e.target.value)})}
-											placeholder="acp, --verbose"
+											placeholder={"acp\n--verbose"}
+											rows={3}
+											className="w-full rounded border border-app-line bg-app-input px-3 py-2 text-sm text-ink placeholder:text-ink-faint focus:outline-none focus:ring-1 focus:ring-accent/50"
 										/>
 									</div>
 									<div className="mt-3 flex flex-col gap-2">
@@ -465,7 +468,7 @@ export function CodeWorkersSection({settings, isLoading}: GlobalSettingsSectionP
 											</div>
 										))}
 										<button
-											onClick={() => updateProfileEnv(index, `ENV_${Object.keys(profile.env).length + 1}`, "")}
+											onClick={() => updateProfileEnv(index, `ENV_${++envKeyCounter.current}`, "")}
 											className="self-start text-xs text-accent hover:underline"
 										>
 											Add env var
