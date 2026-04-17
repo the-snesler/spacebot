@@ -633,6 +633,7 @@ pub struct DefaultsConfig {
     /// "auto" (default) — matches GPT/Codex models; true — always inject; false — never inject.
     pub tool_use_enforcement: ToolUseEnforcement,
     pub opencode: OpenCodeConfig,
+    pub acp: AcpConfig,
     /// Worker log mode: "errors_only", "all_separate", or "all_combined".
     pub worker_log_mode: crate::settings::WorkerLogMode,
     /// Projects workspace management defaults.
@@ -668,6 +669,7 @@ impl std::fmt::Debug for DefaultsConfig {
             .field("cron", &self.cron)
             .field("tool_use_enforcement", &self.tool_use_enforcement)
             .field("opencode", &self.opencode)
+            .field("acp", &self.acp)
             .field("worker_log_mode", &self.worker_log_mode)
             .field("projects", &self.projects)
             .finish()
@@ -1035,6 +1037,9 @@ impl Default for OpenCodeConfig {
         }
     }
 }
+
+/// ACP subprocess worker configuration.
+pub use crate::acp::config::{AcpConfig, AcpProfile};
 
 /// Cortex configuration.
 #[derive(Debug, Clone, Copy)]
@@ -1438,6 +1443,7 @@ impl Default for DefaultsConfig {
             cron: Vec::new(),
             tool_use_enforcement: ToolUseEnforcement::default(),
             opencode: OpenCodeConfig::default(),
+            acp: AcpConfig::default(),
             worker_log_mode: crate::settings::WorkerLogMode::default(),
             projects: ProjectsConfig::default(),
         }

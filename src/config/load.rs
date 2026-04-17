@@ -11,15 +11,15 @@ use super::providers::{
 };
 use super::toml_schema::*;
 use super::{
-    AgentConfig, ApiConfig, ApiType, Binding, BrowserConfig, ChannelConfig, ClosePolicy,
-    CoalesceConfig, CompactionConfig, Config, CortexConfig, CronDef, DefaultsConfig, DiscordConfig,
-    DiscordInstanceConfig, EmailConfig, EmailInstanceConfig, GroupDef, HumanDef, IngestionConfig,
-    LinkDef, LlmConfig, MattermostConfig, MattermostInstanceConfig, McpServerConfig, McpTransport,
-    MemoryPersistenceConfig, MessagingConfig, MetricsConfig, OpenCodeConfig,
-    ParticipantContextConfig, ProjectsConfig, ProviderConfig, SignalConfig, SignalInstanceConfig,
-    SlackCommandConfig, SlackConfig, SlackInstanceConfig, TelegramConfig, TelegramInstanceConfig,
-    TelemetryConfig, TwitchConfig, TwitchInstanceConfig, WarmupConfig, WebhookConfig,
-    normalize_adapter, validate_named_messaging_adapters,
+    AcpConfig, AcpProfile, AgentConfig, ApiConfig, ApiType, Binding, BrowserConfig, ChannelConfig,
+    ClosePolicy, CoalesceConfig, CompactionConfig, Config, CortexConfig, CronDef, DefaultsConfig,
+    DiscordConfig, DiscordInstanceConfig, EmailConfig, EmailInstanceConfig, GroupDef, HumanDef,
+    IngestionConfig, LinkDef, LlmConfig, MattermostConfig, MattermostInstanceConfig,
+    McpServerConfig, McpTransport, MemoryPersistenceConfig, MessagingConfig, MetricsConfig,
+    OpenCodeConfig, ParticipantContextConfig, ProjectsConfig, ProviderConfig, SignalConfig,
+    SignalInstanceConfig, SlackCommandConfig, SlackConfig, SlackInstanceConfig, TelegramConfig,
+    TelegramInstanceConfig, TelemetryConfig, TwitchConfig, TwitchInstanceConfig, WarmupConfig,
+    WebhookConfig, normalize_adapter, validate_named_messaging_adapters,
 };
 use crate::error::{ConfigError, Result};
 
@@ -175,6 +175,42 @@ fn resolve_close_policy(
     } else {
         fallback
     })
+}
+
+fn resolve_acp_config(toml: Option<TomlAcpConfig>, base: &AcpConfig) -> Result<AcpConfig> {
+    let Some(acp) = toml else {
+        return Ok(base.clone());
+    };
+
+    let mut profiles = Vec::with_capacity(acp.profiles.len());
+    for profile in acp.profiles {
+        let command =
+            resolve_env_value(&profile.command).unwrap_or_else(|| profile.command.clone());
+        let env = profile
+            .env
+            .into_iter()
+            .filter_map(|(key, value)| resolve_env_value(&value).map(|resolved| (key, resolved)))
+            .collect();
+        profiles.push(AcpProfile {
+            id: profile.id,
+            display_name: profile.display_name,
+            command,
+            args: profile.args,
+            env,
+        });
+    }
+
+    let resolved = AcpConfig {
+        enabled: acp.enabled.unwrap_or(base.enabled),
+        profiles,
+        handshake_timeout_secs: acp
+            .handshake_timeout_secs
+            .unwrap_or(base.handshake_timeout_secs),
+        stderr_buffer_bytes: acp.stderr_buffer_bytes.unwrap_or(base.stderr_buffer_bytes),
+    };
+
+    crate::acp::validate_acp_config(&resolved)?;
+    Ok(resolved)
 }
 
 impl CortexConfig {
@@ -1743,6 +1779,7 @@ impl Config {
                     }
                 })
                 .unwrap_or_else(|| base_defaults.opencode.clone()),
+            acp: resolve_acp_config(toml.defaults.acp, &base_defaults.acp)?,
             worker_log_mode: toml
                 .defaults
                 .worker_log_mode

@@ -300,6 +300,7 @@ pub(super) struct TomlDefaultsConfig {
     pub(super) cron_timezone: Option<String>,
     pub(super) user_timezone: Option<String>,
     pub(super) opencode: Option<TomlOpenCodeConfig>,
+    pub(super) acp: Option<TomlAcpConfig>,
     pub(super) worker_log_mode: Option<String>,
     pub(super) projects: Option<TomlProjectsConfig>,
 }
@@ -425,6 +426,26 @@ pub(super) struct TomlOpenCodePermissions {
     pub(super) edit: Option<String>,
     pub(super) bash: Option<String>,
     pub(super) webfetch: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub(super) struct TomlAcpConfig {
+    pub(super) enabled: Option<bool>,
+    #[serde(default)]
+    pub(super) profiles: Vec<TomlAcpProfile>,
+    pub(super) handshake_timeout_secs: Option<u64>,
+    pub(super) stderr_buffer_bytes: Option<usize>,
+}
+
+#[derive(Deserialize)]
+pub(super) struct TomlAcpProfile {
+    pub(super) id: String,
+    pub(super) display_name: Option<String>,
+    pub(super) command: String,
+    #[serde(default)]
+    pub(super) args: Vec<String>,
+    #[serde(default)]
+    pub(super) env: HashMap<String, String>,
 }
 
 #[derive(Deserialize)]
