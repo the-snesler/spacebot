@@ -184,13 +184,28 @@ fn resolve_acp_config(toml: Option<TomlAcpConfig>, base: &AcpConfig) -> Result<A
 
     let mut profiles = Vec::with_capacity(acp.profiles.len());
     for profile in acp.profiles {
-        let command =
-            resolve_env_value(&profile.command).unwrap_or_else(|| profile.command.clone());
-        let env = profile
-            .env
-            .into_iter()
-            .filter_map(|(key, value)| resolve_env_value(&value).map(|resolved| (key, resolved)))
-            .collect();
+        let command = resolve_env_value(&profile.command).ok_or_else(|| {
+            ConfigError::Invalid(format!(
+                "ACP profile `{}`: command `{}` could not be resolved (unset env var or missing secret)",
+                profile.id, profile.command
+            ))
+        })?;
+        let mut env = std::collections::HashMap::with_capacity(profile.env.len());
+        for (key, value) in profile.env {
+            match resolve_env_value(&value) {
+                Some(resolved) => {
+                    env.insert(key, resolved);
+                }
+                None => {
+                    tracing::warn!(
+                        profile_id = %profile.id,
+                        %key,
+                        %value,
+                        "ACP profile env var could not be resolved; skipping"
+                    );
+                }
+            }
+        }
         profiles.push(AcpProfile {
             id: profile.id,
             display_name: profile.display_name,
