@@ -317,6 +317,42 @@ where
     }
 }
 
+async fn generate_if_dirty_under_lock<ShouldGenerate, Generate, Fut>(
+    warmup_lock: &tokio::sync::Mutex<()>,
+    should_generate: ShouldGenerate,
+    generate: Generate,
+) -> BulletinRefreshOutcome
+where
+    ShouldGenerate: FnOnce() -> bool,
+    Generate: FnOnce() -> Fut,
+    Fut: std::future::Future<Output = bool>,
+{
+    let _warmup_guard = warmup_lock.lock().await;
+
+    if !should_generate() {
+        tracing::debug!("skipping knowledge synthesis because dirty version was already handled");
+        return BulletinRefreshOutcome::SkippedFresh;
+    }
+
+    if generate().await {
+        BulletinRefreshOutcome::Generated
+    } else {
+        BulletinRefreshOutcome::Failed
+    }
+}
+
+async fn generate_knowledge_synthesis_if_dirty_under_lock(
+    deps: &AgentDeps,
+    logger: &CortexLogger,
+) -> BulletinRefreshOutcome {
+    generate_if_dirty_under_lock(
+        deps.runtime_config.warmup_lock.as_ref(),
+        || should_regenerate_knowledge_synthesis(deps),
+        || generate_knowledge_synthesis(deps, logger),
+    )
+    .await
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum BulletinRefreshOutcome {
     Generated,
@@ -332,6 +368,159 @@ impl BulletinRefreshOutcome {
     #[allow(dead_code)]
     fn generated(self) -> bool {
         matches!(self, Self::Generated)
+    }
+}
+
+fn maybe_spawn_synthesis_task(
+    task: &mut Option<tokio::task::JoinHandle<anyhow::Result<bool>>>,
+    backoff: &SynthesisTaskBackoff,
+    task_name: &'static str,
+    now: Instant,
+    spawn: impl FnOnce() -> tokio::task::JoinHandle<anyhow::Result<bool>>,
+) -> bool {
+    if task.is_some() {
+        return false;
+    }
+
+    if !backoff.can_spawn(now) {
+        tracing::debug!(
+            task = task_name,
+            failure_count = backoff.failure_count,
+            "cortex synthesis task scheduling skipped during backoff"
+        );
+        return false;
+    }
+
+    *task = Some(spawn());
+    true
+}
+
+fn spawn_intraday_synthesis_task(
+    deps: AgentDeps,
+    logger: CortexLogger,
+) -> tokio::task::JoinHandle<anyhow::Result<bool>> {
+    tokio::spawn(async move { maybe_synthesize_intraday_batch(&deps, &logger).await })
+}
+
+fn spawn_daily_synthesis_task(
+    deps: AgentDeps,
+    logger: CortexLogger,
+) -> tokio::task::JoinHandle<anyhow::Result<bool>> {
+    tokio::spawn(async move { maybe_synthesize_daily_summary(&deps, &logger).await })
+}
+
+fn mark_knowledge_synthesis_version_complete(
+    last_version: &std::sync::atomic::AtomicU64,
+    target_version: u64,
+) {
+    last_version.store(target_version, std::sync::atomic::Ordering::Release);
+}
+
+const SYNTHESIS_TASK_BACKOFF_INITIAL_SECS: u64 = 30;
+const SYNTHESIS_TASK_BACKOFF_MAX_SECS: u64 = 5 * 60;
+
+#[derive(Debug, Clone)]
+struct SynthesisTaskBackoff {
+    failure_count: u32,
+    next_allowed_instant: Instant,
+}
+
+impl SynthesisTaskBackoff {
+    fn new(now: Instant) -> Self {
+        Self {
+            failure_count: 0,
+            next_allowed_instant: now,
+        }
+    }
+
+    fn can_spawn(&self, now: Instant) -> bool {
+        now >= self.next_allowed_instant
+    }
+
+    fn record_success(&mut self, now: Instant) {
+        self.failure_count = 0;
+        self.next_allowed_instant = now;
+    }
+
+    fn record_failure(&mut self, now: Instant) {
+        self.failure_count = self.failure_count.saturating_add(1);
+        self.next_allowed_instant = now + synthesis_task_backoff_delay(self.failure_count);
+    }
+}
+
+fn synthesis_task_backoff_delay(failure_count: u32) -> Duration {
+    let exponent = failure_count.saturating_sub(1).min(10);
+    let multiplier = 1_u64 << exponent;
+    let seconds = SYNTHESIS_TASK_BACKOFF_INITIAL_SECS
+        .saturating_mul(multiplier)
+        .min(SYNTHESIS_TASK_BACKOFF_MAX_SECS);
+
+    Duration::from_secs(seconds)
+}
+
+async fn collect_synthesis_task(
+    task: &mut Option<tokio::task::JoinHandle<anyhow::Result<bool>>>,
+    task_name: &'static str,
+    backoff: &mut SynthesisTaskBackoff,
+    now: Instant,
+) {
+    let Some(handle) = task.as_ref() else {
+        return;
+    };
+
+    if !handle.is_finished() {
+        return;
+    }
+
+    let Some(handle) = task.take() else {
+        return;
+    };
+
+    match handle.await {
+        Ok(Ok(true)) => {
+            backoff.record_success(now);
+            tracing::debug!(task = task_name, "cortex synthesis task completed");
+        }
+        Ok(Ok(false)) => {
+            backoff.record_success(now);
+            tracing::trace!(task = task_name, "cortex synthesis task skipped");
+        }
+        Ok(Err(error)) => {
+            backoff.record_failure(now);
+            tracing::warn!(
+                %error,
+                task = task_name,
+                failure_count = backoff.failure_count,
+                "cortex synthesis task failed"
+            );
+        }
+        Err(error) if error.is_cancelled() => {
+            backoff.record_failure(now);
+            tracing::debug!(
+                %error,
+                task = task_name,
+                failure_count = backoff.failure_count,
+                "cortex synthesis task cancelled"
+            );
+        }
+        Err(error) if error.is_panic() => {
+            backoff.record_failure(now);
+            tracing::warn!(
+                %error,
+                task = task_name,
+                failure_count = backoff.failure_count,
+                "cortex synthesis task panicked"
+            );
+        }
+        Err(error) => {
+            backoff.record_failure(now);
+            tracing::warn!(
+                %error,
+                task = task_name,
+                failure_count = backoff.failure_count,
+                "cortex synthesis task failed"
+            );
+        }
     }
 }
 
@@ -998,6 +1187,12 @@ impl Cortex {
             } => {
                 state.track_worker_activity(*worker_id);
             }
+            ProcessEvent::ToolOutput {
+                process_id: ProcessId::Worker(worker_id),
+                ..
+            } => {
+                state.track_worker_activity(*worker_id);
+            }
             ProcessEvent::ToolCompleted {
                 process_id,
                 tool_name,
@@ -1413,7 +1608,8 @@ fn signal_from_event(event: ProcessEvent) -> Option<Signal> {
         | ProcessEvent::WorkerInitialResult { .. }
         | ProcessEvent::WorkerText { .. }
         | ProcessEvent::CortexChatUpdate { .. }
-        | ProcessEvent::SettingsUpdated { .. } => return None,
+        | ProcessEvent::SettingsUpdated { .. }
+        | ProcessEvent::ToolOutput { .. } => return None,
     })
 }
 
@@ -1585,8 +1781,15 @@ pub fn spawn_cortex_loop(deps: AgentDeps, logger: CortexLogger) -> tokio::task::
         let cortex = Cortex::new(deps.clone(), system_prompt);
         let mut event_rx = deps.event_tx.subscribe();
         let mut memory_event_rx = deps.memory_event_tx.subscribe();
-        if let Err(error) =
-            run_cortex_loop(&cortex, &logger, &mut event_rx, &mut memory_event_rx).await
+        let mut tool_output_rx = deps.tool_output_tx.subscribe();
+        if let Err(error) = run_cortex_loop(
+            &cortex,
+            &logger,
+            &mut event_rx,
+            &mut memory_event_rx,
+            &mut tool_output_rx,
+        )
+        .await
         {
             tracing::error!(%error, "cortex loop exited with error");
         }
@@ -1790,6 +1993,7 @@ async fn run_cortex_loop(
     logger: &CortexLogger,
     event_rx: &mut broadcast::Receiver<ProcessEvent>,
     memory_event_rx: &mut broadcast::Receiver<ProcessEvent>,
+    tool_output_rx: &mut broadcast::Receiver<ProcessEvent>,
 ) -> anyhow::Result<()> {
     tracing::info!("cortex loop started");
 
@@ -1848,7 +2052,10 @@ async fn run_cortex_loop(
     let mut last_lag_warning_control: Option<Instant> = None;
     let mut lagged_since_last_warning_memory: u64 = 0;
     let mut last_lag_warning_memory: Option<Instant> = None;
+    let mut lagged_since_last_warning_tool_output: u64 = 0;
+    let mut last_lag_warning_tool_output: Option<Instant> = None;
     let mut memory_event_stream_open = true;
+    let mut tool_output_stream_open = true;
     let mut refresh_task: Option<tokio::task::JoinHandle<BulletinRefreshOutcome>> = None;
     let mut maintenance_task: Option<
         tokio::task::JoinHandle<crate::error::Result<memory_maintenance::MaintenanceReport>>,
@@ -1863,6 +2070,10 @@ async fn run_cortex_loop(
     let mut bulletin_refresh_circuit_open = false;
     let mut next_bulletin_refresh_allowed_at = Instant::now();
     let mut last_maintenance = Instant::now();
+    let mut intraday_synthesis_task: Option<tokio::task::JoinHandle<anyhow::Result<bool>>> = None;
+    let mut daily_synthesis_task: Option<tokio::task::JoinHandle<anyhow::Result<bool>>> = None;
+    let mut intraday_synthesis_backoff = SynthesisTaskBackoff::new(Instant::now());
+    let mut daily_synthesis_backoff = SynthesisTaskBackoff::new(Instant::now());
 
     loop {
         tokio::select! {
@@ -1889,6 +2100,12 @@ async fn run_cortex_loop(
                     }
                     CortexReceiverOutcome::StopLoop => {
                         if let Some(task) = refresh_task.take() {
+                            task.abort();
+                        }
+                        if let Some(task) = intraday_synthesis_task.take() {
+                            task.abort();
+                        }
+                        if let Some(task) = daily_synthesis_task.take() {
                             task.abort();
                         }
                         if let Some(task) = maintenance_task.take() {
@@ -1922,6 +2139,12 @@ async fn run_cortex_loop(
                         if let Some(task) = refresh_task.take() {
                             task.abort();
                         }
+                        if let Some(task) = intraday_synthesis_task.take() {
+                            task.abort();
+                        }
+                        if let Some(task) = daily_synthesis_task.take() {
+                            task.abort();
+                        }
                         if let Some(task) = maintenance_task.take() {
                             task.abort();
                         }
@@ -1932,6 +2155,31 @@ async fn run_cortex_loop(
                     }
                 }
             },
+            event = tool_output_rx.recv(), if tool_output_stream_open => {
+                match handle_cortex_receiver_result(
+                    event,
+                    "tool_output",
+                    ReceiverClosedBehavior::DisableStream,
+                    &mut lagged_since_last_warning_tool_output,
+                    &mut last_lag_warning_tool_output,
+                    LAG_WARNING_INTERVAL_SECS,
+                ) {
+                    CortexReceiverOutcome::Observe(event) => cortex.observe(event).await,
+                    CortexReceiverOutcome::Lagged { dropped } => {
+                        #[cfg(feature = "metrics")]
+                        crate::telemetry::Metrics::global()
+                            .event_receiver_lagged_events_total
+                            .with_label_values(&[&*cortex.deps.agent_id, "cortex_tool_output"])
+                            .inc_by(dropped);
+                        #[cfg(not(feature = "metrics"))]
+                        let _ = dropped;
+                    }
+                    CortexReceiverOutcome::StopLoop => unreachable!("tool output stream cannot stop cortex loop"),
+                    CortexReceiverOutcome::DisableStream => {
+                        tool_output_stream_open = false;
+                    }
+                }
+            },
             _ = tick_timer.tick() => {
                 if let Err(error) = cortex.run_health_tick(logger).await {
                     tracing::warn!(%error, "cortex health tick failed");
@@ -1939,6 +2187,21 @@ async fn run_cortex_loop(
 
                 let cortex_config = **cortex.deps.runtime_config.cortex.load();
                 let now = Instant::now();
+
+                collect_synthesis_task(
+                    &mut intraday_synthesis_task,
+                    "intraday",
+                    &mut intraday_synthesis_backoff,
+                    now,
+                )
+                .await;
+                collect_synthesis_task(
+                    &mut daily_synthesis_task,
+                    "daily",
+                    &mut daily_synthesis_backoff,
+                    now,
+                )
+                .await;
 
                 if refresh_task
                     .as_ref()
@@ -2028,8 +2291,9 @@ async fn run_cortex_loop(
                             }
                             maintenance_consecutive_failures = 0;
                             maintenance_disabled_at = None;
-                            // Merges change memory content — bump dirty flag.
-                            if report.merged > 0 {
+                            // Prunes and merges change memory content; decay is
+                            // importance-only and does not dirty knowledge.
+                            if report.pruned > 0 || report.merged > 0 {
                                 cortex.deps.runtime_config.bump_knowledge_synthesis_version();
                             }
                             logger.log(
@@ -2173,12 +2437,8 @@ async fn run_cortex_loop(
                     let deps = cortex.deps.clone();
                     let synthesis_logger = logger.clone();
                     refresh_task = Some(tokio::spawn(async move {
-                        let success = generate_knowledge_synthesis(&deps, &synthesis_logger).await;
-                        if success {
-                            BulletinRefreshOutcome::Generated
-                        } else {
-                            BulletinRefreshOutcome::Failed
-                        }
+                        generate_knowledge_synthesis_if_dirty_under_lock(&deps, &synthesis_logger)
+                            .await
                     }));
                 }
 
@@ -2231,15 +2491,21 @@ async fn run_cortex_loop(
                     last_maintenance = Instant::now();
                 }
 
-                // Working memory: intra-day synthesis (cheap SQL check, LLM only on threshold).
-                if let Err(error) = maybe_synthesize_intraday_batch(&cortex.deps, logger).await {
-                    tracing::warn!(%error, "intra-day synthesis check failed");
-                }
+                maybe_spawn_synthesis_task(
+                    &mut intraday_synthesis_task,
+                    &intraday_synthesis_backoff,
+                    "intraday",
+                    now,
+                    || spawn_intraday_synthesis_task(cortex.deps.clone(), logger.clone()),
+                );
 
-                // Working memory: daily summary for yesterday (idempotent, 1 LLM call/day max).
-                if let Err(error) = maybe_synthesize_daily_summary(&cortex.deps, logger).await {
-                    tracing::warn!(%error, "daily summary check failed");
-                }
+                maybe_spawn_synthesis_task(
+                    &mut daily_synthesis_task,
+                    &daily_synthesis_backoff,
+                    "daily",
+                    now,
+                    || spawn_daily_synthesis_task(cortex.deps.clone(), logger.clone()),
+                );
 
                 // Working memory: prune old events (cheap SQL, runs every tick but deletes nothing most of the time).
                 let wm_config = **cortex.deps.runtime_config.working_memory.load();
@@ -2618,6 +2884,18 @@ const KNOWLEDGE_SYNTHESIS_SECTIONS: &[BulletinSection] = &[
     },
 ];
 
+#[derive(Debug, Default)]
+struct GatheredSections {
+    text: String,
+    failed_sections: usize,
+}
+
+impl GatheredSections {
+    fn has_failures(&self) -> bool {
+        self.failed_sections > 0
+    }
+}
+
 /// Generate a change-driven knowledge synthesis (Layer 5) and store it in RuntimeConfig.
 ///
 /// Uses the same programmatic gather + LLM synthesis pattern as the bulletin,
@@ -2627,10 +2905,50 @@ const KNOWLEDGE_SYNTHESIS_SECTIONS: &[BulletinSection] = &[
 pub async fn generate_knowledge_synthesis(deps: &AgentDeps, logger: &CortexLogger) -> bool {
     tracing::info!("cortex generating knowledge synthesis");
     let started = Instant::now();
+    let target_version = deps
+        .runtime_config
+        .knowledge_synthesis_version
+        .load(std::sync::atomic::Ordering::Acquire);
 
-    // Gather narrower sections (no identity, no events, no recent).
-    let raw_sections = gather_sections_from_list(deps, KNOWLEDGE_SYNTHESIS_SECTIONS).await;
+    let mut gathered_sections = gather_sections_from_list(deps, KNOWLEDGE_SYNTHESIS_SECTIONS).await;
+    let active_tasks_failed = match gather_active_tasks(deps).await {
+        Ok(tasks) => {
+            gathered_sections.text.push_str(&tasks);
+            false
+        }
+        Err(error) => {
+            tracing::warn!(%error, "failed to gather active tasks for knowledge synthesis");
+            true
+        }
+    };
+    let gather_failed = gathered_sections.has_failures() || active_tasks_failed;
+    let failed_memory_sections = gathered_sections.failed_sections;
+    let raw_sections = gathered_sections.text;
     let section_count = raw_sections.matches("### ").count();
+
+    if gather_failed {
+        let duration_ms = started.elapsed().as_millis() as u64;
+        tracing::warn!(
+            failed_memory_sections,
+            active_tasks_failed,
+            duration_ms,
+            "knowledge synthesis input gather failed"
+        );
+        update_warmup_status(deps, |status| {
+            status.last_error = Some("knowledge synthesis input gather failed".to_string());
+        });
+        logger.log(
+            "knowledge_synthesis_failed",
+            "Knowledge synthesis failed while gathering input",
+            Some(serde_json::json!({
+                "duration_ms": duration_ms,
+                "failed_memory_sections": failed_memory_sections,
+                "active_tasks_failed": active_tasks_failed,
+                "target_version": target_version,
+            })),
+        );
+        return false;
+    }
 
     if raw_sections.is_empty() {
         tracing::info!("no memories found for knowledge synthesis");
@@ -2641,17 +2959,31 @@ pub async fn generate_knowledge_synthesis(deps: &AgentDeps, logger: &CortexLogge
         deps.runtime_config
             .memory_bulletin
             .store(Arc::new(String::new()));
+        mark_knowledge_synthesis_version_complete(
+            &deps.runtime_config.knowledge_synthesis_last_version,
+            target_version,
+        );
+        update_warmup_status(deps, |status| {
+            status.last_refresh_unix_ms = Some(chrono::Utc::now().timestamp_millis());
+            status.bulletin_age_secs = Some(0);
+            if status.state != crate::config::WarmupState::Warming {
+                status.state = crate::config::WarmupState::Warm;
+                status.last_error = None;
+            }
+        });
+        logger.log(
+            "knowledge_synthesis_generated",
+            "Knowledge synthesis skipped: no memories or active tasks",
+            Some(serde_json::json!({
+                "word_count": 0,
+                "sections": 0,
+                "duration_ms": started.elapsed().as_millis() as u64,
+                "target_version": target_version,
+                "skipped": true,
+            })),
+        );
         return true;
     }
-
-    // Append active tasks (same as bulletin).
-    let raw_sections = match gather_active_tasks(deps).await {
-        Ok(tasks) => format!("{raw_sections}{tasks}"),
-        Err(error) => {
-            tracing::warn!(%error, "failed to gather active tasks for knowledge synthesis");
-            raw_sections
-        }
-    };
 
     let cortex_config = **deps.runtime_config.cortex.load();
     let prompt_engine = deps.runtime_config.prompts.load();
@@ -2714,14 +3046,10 @@ pub async fn generate_knowledge_synthesis(deps: &AgentDeps, logger: &CortexLogge
             deps.runtime_config
                 .memory_bulletin
                 .store(Arc::new(synthesis));
-            // Mark this version as synthesized.
-            let current = deps
-                .runtime_config
-                .knowledge_synthesis_version
-                .load(std::sync::atomic::Ordering::Relaxed);
-            deps.runtime_config
-                .knowledge_synthesis_last_version
-                .store(current, std::sync::atomic::Ordering::Relaxed);
+            mark_knowledge_synthesis_version_complete(
+                &deps.runtime_config.knowledge_synthesis_last_version,
+                target_version,
+            );
             // Update warmup status.
             let refresh_ms = chrono::Utc::now().timestamp_millis();
             update_warmup_status(deps, |status| {
@@ -2768,8 +3096,11 @@ pub async fn generate_knowledge_synthesis(deps: &AgentDeps, logger: &CortexLogge
 ///
 /// Uses the same pattern as `gather_bulletin_sections` (empty-query metadata
 /// search) but accepts an arbitrary section list for narrower scoping.
-async fn gather_sections_from_list(deps: &AgentDeps, sections: &[BulletinSection]) -> String {
-    let mut output = String::new();
+async fn gather_sections_from_list(
+    deps: &AgentDeps,
+    sections: &[BulletinSection],
+) -> GatheredSections {
+    let mut gathered = GatheredSections::default();
 
     for section in sections {
         let config = SearchConfig {
@@ -2788,6 +3119,7 @@ async fn gather_sections_from_list(deps: &AgentDeps, sections: &[BulletinSection
                     %error,
                     "knowledge synthesis section query failed"
                 );
+                gathered.failed_sections += 1;
                 continue;
             }
         };
@@ -2796,9 +3128,11 @@ async fn gather_sections_from_list(deps: &AgentDeps, sections: &[BulletinSection
             continue;
         }
 
-        output.push_str(&format!("### {}\n\n", section.label));
+        gathered
+            .text
+            .push_str(&format!("### {}\n\n", section.label));
         for result in &results {
-            output.push_str(&format!(
+            gathered.text.push_str(&format!(
                 "- [{}] (importance: {:.1}) {}\n",
                 result.memory.memory_type,
                 result.memory.importance,
@@ -2810,10 +3144,10 @@ async fn gather_sections_from_list(deps: &AgentDeps, sections: &[BulletinSection
                     .unwrap_or(&result.memory.content),
             ));
         }
-        output.push('\n');
+        gathered.text.push('\n');
     }
 
-    output
+    gathered
 }
 
 /// Check if knowledge synthesis needs regeneration based on dirty flag and debounce.
@@ -2821,11 +3155,11 @@ pub fn should_regenerate_knowledge_synthesis(deps: &AgentDeps) -> bool {
     let current_version = deps
         .runtime_config
         .knowledge_synthesis_version
-        .load(std::sync::atomic::Ordering::Relaxed);
+        .load(std::sync::atomic::Ordering::Acquire);
     let last_version = deps
         .runtime_config
         .knowledge_synthesis_last_version
-        .load(std::sync::atomic::Ordering::Relaxed);
+        .load(std::sync::atomic::Ordering::Acquire);
 
     if current_version == last_version {
         return false;
@@ -2836,7 +3170,7 @@ pub fn should_regenerate_knowledge_synthesis(deps: &AgentDeps) -> bool {
     let last_change = deps
         .runtime_config
         .knowledge_synthesis_last_change
-        .load(std::sync::atomic::Ordering::Relaxed);
+        .load(std::sync::atomic::Ordering::Acquire);
     let now = chrono::Utc::now().timestamp();
     let elapsed = now.saturating_sub(last_change) as u64;
 
@@ -4293,16 +4627,18 @@ async fn fetch_memories_for_association(
 mod tests {
     use super::{
         BULLETIN_REFRESH_CIRCUIT_OPEN_SECS, BULLETIN_REFRESH_CIRCUIT_OPEN_THRESHOLD, BranchTracker,
-        BulletinRefreshOutcome, CortexReceiverOutcome, HealthRuntimeState,
+        BulletinRefreshOutcome, CortexReceiverOutcome, GatheredSections, HealthRuntimeState,
         MAINTENANCE_TASK_CANCEL_GRACE_SECS, MaintenanceTimeoutAction, ReceiverClosedBehavior,
-        Signal, WorkerTracker, apply_cancelled_warmup_status, build_kill_targets,
-        claim_detached_completion, detached_timeout_transition, handle_cortex_receiver_result,
+        Signal, SynthesisTaskBackoff, WorkerTracker, apply_cancelled_warmup_status,
+        build_kill_targets, claim_detached_completion, collect_synthesis_task,
+        detached_timeout_transition, generate_if_dirty_under_lock, handle_cortex_receiver_result,
         has_completed_initial_warmup, is_cancelled_control_result, is_terminal_control_result,
-        maintenance_task_timeout, maintenance_timeout_action, maybe_close_bulletin_refresh_circuit,
-        maybe_generate_bulletin_under_lock, parse_structured_success_flag, push_signal_into_buffer,
-        record_bulletin_refresh_failure, should_execute_warmup,
-        should_generate_bulletin_from_bulletin_loop, signal_from_event, summarize_signal_text,
-        take_lagged_control_flag,
+        maintenance_task_timeout, maintenance_timeout_action,
+        mark_knowledge_synthesis_version_complete, maybe_close_bulletin_refresh_circuit,
+        maybe_generate_bulletin_under_lock, maybe_spawn_synthesis_task,
+        parse_structured_success_flag, push_signal_into_buffer, record_bulletin_refresh_failure,
+        should_execute_warmup, should_generate_bulletin_from_bulletin_loop, signal_from_event,
+        summarize_signal_text, take_lagged_control_flag,
     };
     use crate::ProcessEvent;
     use crate::agent::process_control::ControlActionResult;
@@ -4314,7 +4650,7 @@ mod tests {
     use sqlx::sqlite::SqlitePoolOptions;
     use std::collections::VecDeque;
     use std::sync::Arc;
-    use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
     use std::time::{Duration, Instant};
 
     #[test]
@@ -4510,6 +4846,211 @@ mod tests {
         assert_eq!(calls.load(Ordering::SeqCst), 0);
     }
 
+    #[tokio::test]
+    async fn dirty_knowledge_synthesis_rechecks_after_waiting_for_warmup_lock() {
+        let warmup_lock = Arc::new(tokio::sync::Mutex::new(()));
+        let dirty = Arc::new(AtomicBool::new(true));
+        let calls = Arc::new(AtomicUsize::new(0));
+
+        let guard = warmup_lock.as_ref().lock().await;
+
+        let warmup_lock_for_task = Arc::clone(&warmup_lock);
+        let dirty_for_task = Arc::clone(&dirty);
+        let calls_for_task = Arc::clone(&calls);
+        let task = tokio::spawn(async move {
+            generate_if_dirty_under_lock(
+                warmup_lock_for_task.as_ref(),
+                || dirty_for_task.load(Ordering::SeqCst),
+                || async move {
+                    calls_for_task.fetch_add(1, Ordering::SeqCst);
+                    true
+                },
+            )
+            .await
+        });
+
+        // A warmup pass completes while the dirty task is waiting for the same
+        // lock. Once unblocked, the dirty task must observe the clean version
+        // and skip instead of running a duplicate synthesis.
+        dirty.store(false, Ordering::SeqCst);
+        drop(guard);
+
+        let result = task.await.expect("task should join");
+        assert_eq!(result, BulletinRefreshOutcome::SkippedFresh);
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn working_memory_synthesis_task_is_single_flight() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let (release_tx, release_rx) = tokio::sync::oneshot::channel::<()>();
+        let release_rx = Arc::new(tokio::sync::Mutex::new(Some(release_rx)));
+        let mut task: Option<tokio::task::JoinHandle<anyhow::Result<bool>>> = None;
+        let now = Instant::now();
+        let backoff = SynthesisTaskBackoff::new(now);
+
+        let calls_for_first = Arc::clone(&calls);
+        let release_rx_for_first = Arc::clone(&release_rx);
+        assert!(maybe_spawn_synthesis_task(
+            &mut task,
+            &backoff,
+            "intraday",
+            now,
+            move || {
+                tokio::spawn(async move {
+                    calls_for_first.fetch_add(1, Ordering::SeqCst);
+                    let receiver = release_rx_for_first
+                        .lock()
+                        .await
+                        .take()
+                        .expect("release receiver should exist");
+                    receiver.await.expect("release oneshot dropped");
+                    Ok(true)
+                })
+            }
+        ));
+
+        let calls_for_second = Arc::clone(&calls);
+        assert!(!maybe_spawn_synthesis_task(
+            &mut task,
+            &backoff,
+            "intraday",
+            now,
+            move || {
+                tokio::spawn(async move {
+                    calls_for_second.fetch_add(1, Ordering::SeqCst);
+                    Ok(true)
+                })
+            }
+        ));
+
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while calls.load(Ordering::SeqCst) == 0 {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("first synthesis task should start");
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        release_tx.send(()).expect("release should send");
+        task.take()
+            .expect("task should exist")
+            .await
+            .expect("task should join")
+            .expect("task should succeed");
+    }
+
+    #[tokio::test]
+    async fn synthesis_task_failure_backs_off_before_respawn() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let now = Instant::now();
+        let mut backoff = SynthesisTaskBackoff::new(now);
+        let mut task: Option<tokio::task::JoinHandle<anyhow::Result<bool>>> = None;
+
+        let calls_for_first = Arc::clone(&calls);
+        assert!(maybe_spawn_synthesis_task(
+            &mut task,
+            &backoff,
+            "intraday",
+            now,
+            move || {
+                tokio::spawn(async move {
+                    calls_for_first.fetch_add(1, Ordering::SeqCst);
+                    Err(anyhow::anyhow!("backend unavailable"))
+                })
+            }
+        ));
+
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while task.as_ref().is_some_and(|handle| !handle.is_finished()) {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("failed synthesis task should finish");
+        collect_synthesis_task(&mut task, "intraday", &mut backoff, now).await;
+
+        assert!(task.is_none());
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert_eq!(backoff.failure_count, 1);
+
+        let retry_at = backoff.next_allowed_instant;
+        let blocked_at = retry_at
+            .checked_sub(Duration::from_millis(1))
+            .expect("retry instant should be after current instant");
+        let calls_for_blocked = Arc::clone(&calls);
+        assert!(!maybe_spawn_synthesis_task(
+            &mut task,
+            &backoff,
+            "intraday",
+            blocked_at,
+            move || {
+                tokio::spawn(async move {
+                    calls_for_blocked.fetch_add(1, Ordering::SeqCst);
+                    Ok(true)
+                })
+            }
+        ));
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+
+        let calls_for_retry = Arc::clone(&calls);
+        assert!(maybe_spawn_synthesis_task(
+            &mut task,
+            &backoff,
+            "intraday",
+            retry_at,
+            move || {
+                tokio::spawn(async move {
+                    calls_for_retry.fetch_add(1, Ordering::SeqCst);
+                    Ok(true)
+                })
+            }
+        ));
+
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while task.as_ref().is_some_and(|handle| !handle.is_finished()) {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("retry synthesis task should finish");
+        collect_synthesis_task(&mut task, "intraday", &mut backoff, retry_at).await;
+
+        assert!(task.is_none());
+        assert_eq!(backoff.failure_count, 0);
+        assert_eq!(backoff.next_allowed_instant, retry_at);
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn knowledge_synthesis_completion_marks_target_version_not_current_version() {
+        let current_version = std::sync::atomic::AtomicU64::new(2);
+        let last_version = std::sync::atomic::AtomicU64::new(0);
+        let target_version = 1;
+
+        mark_knowledge_synthesis_version_complete(&last_version, target_version);
+
+        assert_eq!(
+            current_version.load(Ordering::Acquire),
+            2,
+            "newer dirty version should still be pending"
+        );
+        assert_eq!(last_version.load(Ordering::Acquire), target_version);
+    }
+
+    #[test]
+    fn gathered_sections_fail_when_any_section_query_failed() {
+        let gathered = GatheredSections {
+            text: String::new(),
+            failed_sections: 1,
+        };
+
+        assert!(
+            gathered.has_failures(),
+            "failed section queries must keep synthesis retryable"
+        );
+    }
+
     #[test]
     fn summarize_signal_text_uses_first_non_empty_line() {
         let text = "\n\nfirst line\nsecond line";
@@ -4601,6 +5142,7 @@ mod tests {
                 agent_id: agent_id.clone(),
                 process_id: crate::ProcessId::Worker(worker_id),
                 channel_id: Some(channel_id.clone()),
+                call_id: "shell-call-1".to_string(),
                 tool_name: "shell".to_string(),
                 args: "echo hi".to_string(),
             },
@@ -4608,6 +5150,7 @@ mod tests {
                 agent_id: agent_id.clone(),
                 process_id: crate::ProcessId::Worker(worker_id),
                 channel_id: Some(channel_id.clone()),
+                call_id: "shell-call-1".to_string(),
                 tool_name: "shell".to_string(),
                 result: "done".to_string(),
             },
